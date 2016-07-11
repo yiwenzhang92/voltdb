@@ -1632,7 +1632,7 @@ public class ProcedureRunner {
                    m_txnState.m_spHandle,
                    m_txnState.uniqueId,
                    m_isReadOnly,
-                   m_txnState.getInvocation().getTraceName() != null);
+                   m_txnState.getInvocation().getTraceName());
        } catch (Throwable ex) {
            if (! m_isReadOnly) {
                // roll back the current batch and re-throw the EE exception

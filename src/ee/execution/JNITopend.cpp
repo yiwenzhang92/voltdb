@@ -277,12 +277,13 @@ int JNITopend::loadNextDependency(int32_t dependencyId, voltdb::Pool *stringPool
     }
 }
 
-void JNITopend::traceLog(std::string &name, std::string &cat, std::string &args) {
+void JNITopend::traceLog(bool isBegin, std::string &name, std::string &cat, std::string &args) {
     jstring nameStr = m_jniEnv->NewStringUTF(name.c_str());
     jstring catStr = m_jniEnv->NewStringUTF(cat.c_str());
     jstring argsStr = m_jniEnv->NewStringUTF(args.c_str());
 
-    m_jniEnv->CallVoidMethod(m_javaExecutionEngine, m_traceLogMID, nameStr, catStr, argsStr);
+    m_jniEnv->CallVoidMethod(m_javaExecutionEngine, m_traceLogMID,
+                             isBegin ? JNI_TRUE : JNI_FALSE, nameStr, catStr, argsStr);
 
     m_jniEnv->DeleteLocalRef(nameStr);
     m_jniEnv->DeleteLocalRef(catStr);

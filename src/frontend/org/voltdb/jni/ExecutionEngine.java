@@ -39,6 +39,7 @@ import org.voltdb.TableStreamType;
 import org.voltdb.TheHashinator.HashinatorConfig;
 import org.voltdb.VoltDB;
 import org.voltdb.VoltTable;
+import org.voltdb.VoltTrace;
 import org.voltdb.exceptions.EEException;
 import org.voltdb.messaging.FastDeserializer;
 import org.voltdb.planner.ActivePlanRepository;
@@ -132,6 +133,8 @@ public abstract class ExecutionEngine implements FastDeserializer.Deserializatio
     private long m_lastMsgTime;
     private long m_logDuration = INITIAL_LOG_DURATION;
     private String[] m_sqlTexts = null;
+
+    private String m_traceFilename = null;
 
     /** information about EE calls back to JAVA. For test.*/
     public int m_callsFromEE = 0;
@@ -373,11 +376,18 @@ public abstract class ExecutionEngine implements FastDeserializer.Deserializatio
         }
     }
 
-    public void traceLog(String name,
+    public void traceLog(boolean isBegin,
+                         String name,
                          String cat,
                          String args)
     {
-        log.info("Tracing " + name + " category " + cat + " args " + args);
+        if (m_traceFilename != null) {
+            if (isBegin) {
+                VoltTrace.bDuration(m_traceFilename, name, cat, args);
+            } else {
+                VoltTrace.eDuration(m_traceFilename);
+            }
+        }
     }
 
     public long fragmentProgressUpdate(int indexFromFragmentTask,
@@ -572,7 +582,7 @@ public abstract class ExecutionEngine implements FastDeserializer.Deserializatio
                                             long lastCommittedSpHandle,
                                             long uniqueId,
                                             long undoQuantumToken,
-                                            boolean traceOn) throws EEException
+                                            String traceFilename) throws EEException
     {
         try {
             // For now, re-transform undoQuantumToken to readOnly. Redundancy work in site.executePlanFragments()
@@ -582,9 +592,10 @@ public abstract class ExecutionEngine implements FastDeserializer.Deserializatio
             m_startTime = 0;
             m_logDuration = INITIAL_LOG_DURATION;
             m_sqlTexts = sqlTexts;
+            m_traceFilename = traceFilename;
 
             VoltTable[] results = coreExecutePlanFragments(numFragmentIds, planFragmentIds, inputDepIds,
-                    parameterSets, txnId, spHandle, lastCommittedSpHandle, uniqueId, undoQuantumToken, traceOn);
+                    parameterSets, txnId, spHandle, lastCommittedSpHandle, uniqueId, undoQuantumToken, m_traceFilename != null);
             m_plannerStats.updateEECacheStats(m_eeCacheSize, numFragmentIds - m_cacheMisses,
                     m_cacheMisses, m_partitionId);
             return results;
@@ -596,6 +607,7 @@ public abstract class ExecutionEngine implements FastDeserializer.Deserializatio
             m_cacheMisses = 0;
 
             m_sqlTexts = null;
+            m_traceFilename = null;
         }
     }
 

@@ -1373,7 +1373,7 @@ public class Site implements Runnable, SiteProcedureConnection, SiteSnapshotConn
                                             long spHandle,
                                             long uniqueId,
                                             boolean readOnly,
-                                            boolean traceOn)
+                                            String traceFilename)
             throws EEException
     {
         return m_ee.executePlanFragments(
@@ -1387,7 +1387,7 @@ public class Site implements Runnable, SiteProcedureConnection, SiteSnapshotConn
         m_lastCommittedSpHandle,
         uniqueId,
         readOnly ? Long.MAX_VALUE : getNextUndoTokenBroken(),
-        traceOn);
+        traceFilename);
     }
 
     @Override
