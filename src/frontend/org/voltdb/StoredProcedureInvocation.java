@@ -23,6 +23,8 @@ import java.nio.ByteBuffer;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.FutureTask;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.json_voltpatches.JSONString;
 import org.json_voltpatches.JSONStringer;
@@ -44,6 +46,11 @@ public class StoredProcedureInvocation implements JSONString {
 
     ProcedureInvocationType type = ProcedureInvocationType.ORIGINAL;
     String procName = null;
+
+    // Transient state
+    public static final Pattern PROC_NAME_PATTERN = Pattern.compile("^(#(.*)#)?(.*)$");
+    String traceName = null;
+    String userProcName = null;
 
     public static final long UNITIALIZED_ID = -1L;
     /*
@@ -134,7 +141,30 @@ public class StoredProcedureInvocation implements JSONString {
     }
 
     public String getProcName() {
-        return procName;
+        if (userProcName != null) {
+            return userProcName;
+        } else {
+            parseName();
+            return userProcName;
+        }
+    }
+
+    public String getTraceName() {
+        if (userProcName != null) {
+            return traceName;
+        } else {
+            parseName();
+            return traceName;
+        }
+    }
+
+    private void parseName()
+    {
+        final Matcher matcher = PROC_NAME_PATTERN.matcher(procName);
+        if (matcher.matches()) {
+            traceName = matcher.group(2);
+            userProcName = matcher.group(3);
+        }
     }
 
     public long getOriginalTxnId() {

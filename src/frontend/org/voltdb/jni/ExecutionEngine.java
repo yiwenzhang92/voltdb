@@ -373,6 +373,13 @@ public abstract class ExecutionEngine implements FastDeserializer.Deserializatio
         }
     }
 
+    public void traceLog(String name,
+                         String cat,
+                         String args)
+    {
+        log.info("Tracing " + name + " category " + cat + " args " + args);
+    }
+
     public long fragmentProgressUpdate(int indexFromFragmentTask,
             int planNodeTypeAsInt,
             long tuplesProcessed,
@@ -564,7 +571,8 @@ public abstract class ExecutionEngine implements FastDeserializer.Deserializatio
                                             long spHandle,
                                             long lastCommittedSpHandle,
                                             long uniqueId,
-                                            long undoQuantumToken) throws EEException
+                                            long undoQuantumToken,
+                                            boolean traceOn) throws EEException
     {
         try {
             // For now, re-transform undoQuantumToken to readOnly. Redundancy work in site.executePlanFragments()
@@ -576,7 +584,7 @@ public abstract class ExecutionEngine implements FastDeserializer.Deserializatio
             m_sqlTexts = sqlTexts;
 
             VoltTable[] results = coreExecutePlanFragments(numFragmentIds, planFragmentIds, inputDepIds,
-                    parameterSets, txnId, spHandle, lastCommittedSpHandle, uniqueId, undoQuantumToken);
+                    parameterSets, txnId, spHandle, lastCommittedSpHandle, uniqueId, undoQuantumToken, traceOn);
             m_plannerStats.updateEECacheStats(m_eeCacheSize, numFragmentIds - m_cacheMisses,
                     m_cacheMisses, m_partitionId);
             return results;
@@ -599,7 +607,8 @@ public abstract class ExecutionEngine implements FastDeserializer.Deserializatio
                                                             long spHandle,
                                                             long lastCommittedSpHandle,
                                                             long uniqueId,
-                                                            long undoQuantumToken) throws EEException;
+                                                            long undoQuantumToken,
+                                                            boolean traceOn) throws EEException;
 
     /** Used for test code only (AFAIK jhugg) */
     public abstract VoltTable serializeTable(int tableId) throws EEException;
@@ -849,7 +858,8 @@ public abstract class ExecutionEngine implements FastDeserializer.Deserializatio
             long spHandle,
             long lastCommittedSpHandle,
             long uniqueId,
-            long undoToken);
+            long undoToken,
+            boolean traceOn);
 
     /**
      * Serialize the result temporary table.

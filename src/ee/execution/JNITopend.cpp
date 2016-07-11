@@ -98,6 +98,13 @@ JNITopend::JNITopend(JNIEnv *env, jobject caller) : m_jniEnv(env), m_javaExecuti
         throw std::exception();
     }
 
+    m_traceLogMID = m_jniEnv->GetMethodID(jniClass, "traceLog", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String)V");
+    if (m_traceLogMID == NULL) {
+        m_jniEnv->ExceptionDescribe();
+        assert(m_traceLogMID != 0);
+        throw std::exception();
+    }
+
     m_fragmentProgressUpdateMID = m_jniEnv->GetMethodID(jniClass, "fragmentProgressUpdate", "(IIJJJ)J");
     if (m_fragmentProgressUpdateMID == NULL) {
         m_jniEnv->ExceptionDescribe();
@@ -267,6 +274,23 @@ int JNITopend::loadNextDependency(int32_t dependencyId, voltdb::Pool *stringPool
     }
     else {
         return 0;
+    }
+}
+
+void JNITopend::traceLog(std::string &name, std::string &cat, std::string &args) {
+    jstring nameStr = m_jniEnv->NewStringUTF(name.c_str());
+    jstring catStr = m_jniEnv->NewStringUTF(cat.c_str());
+    jstring argsStr = m_jniEnv->NewStringUTF(args.c_str());
+
+    m_jniEnv->CallVoidMethod(m_javaExecutionEngine, m_traceLogMID, nameStr, catStr, argsStr);
+
+    m_jniEnv->DeleteLocalRef(nameStr);
+    m_jniEnv->DeleteLocalRef(catStr);
+    m_jniEnv->DeleteLocalRef(argsStr);
+
+    if (m_jniEnv->ExceptionCheck()) {
+        m_jniEnv->ExceptionDescribe();
+        throw std::exception();
     }
 }
 

@@ -45,15 +45,15 @@ public class MockExecutionEngine extends ExecutionEngine {
 
     @Override
     protected VoltTable[] coreExecutePlanFragments(
-            final int numFragmentIds,
-            final long[] planFragmentIds,
-            final long[] inputDepIds,
-            final Object[] parameterSets,
-            final long txnId,
-            final long spHandle,
-            final long lastCommittedSpHandle,
-            final long uniqueId,
-            final long undoToken) throws EEException
+                                                  final int numFragmentIds,
+                                                  final long[] planFragmentIds,
+                                                  final long[] inputDepIds,
+                                                  final Object[] parameterSets,
+                                                  final long txnId,
+                                                  final long spHandle,
+                                                  final long lastCommittedSpHandle,
+                                                  final long uniqueId,
+                                                  final long undoToken, boolean traceOn) throws EEException
     {
         if (numFragmentIds != 1) {
             return null;

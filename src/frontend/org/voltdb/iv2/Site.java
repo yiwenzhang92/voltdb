@@ -96,7 +96,6 @@ import org.voltdb.messaging.FragmentTaskMessage;
 import org.voltdb.messaging.Iv2InitiateTaskMessage;
 import org.voltdb.rejoin.TaskLog;
 import org.voltdb.sysprocs.SysProcFragmentId;
-import org.voltdb.utils.CatalogUtil;
 import org.voltdb.utils.CompressionService;
 import org.voltdb.utils.LogKeys;
 import org.voltdb.utils.MinimumRatioMaintainer;
@@ -1373,20 +1372,22 @@ public class Site implements Runnable, SiteProcedureConnection, SiteSnapshotConn
                                             long txnId,
                                             long spHandle,
                                             long uniqueId,
-                                            boolean readOnly)
+                                            boolean readOnly,
+                                            boolean traceOn)
             throws EEException
     {
         return m_ee.executePlanFragments(
-                numFragmentIds,
-                planFragmentIds,
-                inputDepIds,
-                parameterSets,
-                sqlTexts,
-                txnId,
-                spHandle,
-                m_lastCommittedSpHandle,
-                uniqueId,
-                readOnly ? Long.MAX_VALUE : getNextUndoTokenBroken());
+        numFragmentIds,
+        planFragmentIds,
+        inputDepIds,
+        parameterSets,
+        sqlTexts,
+        txnId,
+        spHandle,
+        m_lastCommittedSpHandle,
+        uniqueId,
+        readOnly ? Long.MAX_VALUE : getNextUndoTokenBroken(),
+        traceOn);
     }
 
     @Override
