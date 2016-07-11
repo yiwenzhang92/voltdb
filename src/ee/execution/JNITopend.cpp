@@ -98,7 +98,7 @@ JNITopend::JNITopend(JNIEnv *env, jobject caller) : m_jniEnv(env), m_javaExecuti
         throw std::exception();
     }
 
-    m_traceLogMID = m_jniEnv->GetMethodID(jniClass, "traceLog", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String)V");
+    m_traceLogMID = m_jniEnv->GetMethodID(jniClass, "traceLog", "(Ljava/lang/String;Ljava/lang/String)V");
     if (m_traceLogMID == NULL) {
         m_jniEnv->ExceptionDescribe();
         assert(m_traceLogMID != 0);
@@ -277,16 +277,14 @@ int JNITopend::loadNextDependency(int32_t dependencyId, voltdb::Pool *stringPool
     }
 }
 
-void JNITopend::traceLog(bool isBegin, std::string &name, std::string &cat, std::string &args) {
-    jstring nameStr = m_jniEnv->NewStringUTF(name.c_str());
-    jstring catStr = m_jniEnv->NewStringUTF(cat.c_str());
-    jstring argsStr = m_jniEnv->NewStringUTF(args.c_str());
+void JNITopend::traceLog(bool isBegin, const char *name, const char *args) {
+    jstring nameStr = m_jniEnv->NewStringUTF(name);
+    jstring argsStr = m_jniEnv->NewStringUTF(args);
 
     m_jniEnv->CallVoidMethod(m_javaExecutionEngine, m_traceLogMID,
-                             isBegin ? JNI_TRUE : JNI_FALSE, nameStr, catStr, argsStr);
+                             isBegin ? JNI_TRUE : JNI_FALSE, nameStr, argsStr);
 
     m_jniEnv->DeleteLocalRef(nameStr);
-    m_jniEnv->DeleteLocalRef(catStr);
     m_jniEnv->DeleteLocalRef(argsStr);
 
     if (m_jniEnv->ExceptionCheck()) {

@@ -33,9 +33,8 @@ public:
     inline JNITopend* updateJNIEnv(JNIEnv *env) { m_jniEnv = env; return this; }
     int loadNextDependency(int32_t dependencyId, Pool *stringPool, Table* destination);
     void traceLog(bool isBegin,
-                  std::string &name,
-                  std::string &cat,
-                  std::string &args);
+                  const char *name,
+                  const char *args);
     int64_t fragmentProgressUpdate(
                 int32_t batchIndex,
                 PlanNodeType planNodeType,

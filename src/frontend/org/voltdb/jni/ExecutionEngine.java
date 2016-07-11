@@ -378,12 +378,11 @@ public abstract class ExecutionEngine implements FastDeserializer.Deserializatio
 
     public void traceLog(boolean isBegin,
                          String name,
-                         String cat,
                          String args)
     {
         if (m_traceFilename != null) {
             if (isBegin) {
-                VoltTrace.bDuration(m_traceFilename, name, cat, args);
+                VoltTrace.bDuration(m_traceFilename, name, "ee" + m_partitionId, args);
             } else {
                 VoltTrace.eDuration(m_traceFilename);
             }
