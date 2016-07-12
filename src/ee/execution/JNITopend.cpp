@@ -98,7 +98,7 @@ JNITopend::JNITopend(JNIEnv *env, jobject caller) : m_jniEnv(env), m_javaExecuti
         throw std::exception();
     }
 
-    m_traceLogMID = m_jniEnv->GetMethodID(jniClass, "traceLog", "(Ljava/lang/String;Ljava/lang/String)V");
+    m_traceLogMID = m_jniEnv->GetMethodID(jniClass, "traceLog", "(ZLjava/lang/String;Ljava/lang/String;)V");
     if (m_traceLogMID == NULL) {
         m_jniEnv->ExceptionDescribe();
         assert(m_traceLogMID != 0);

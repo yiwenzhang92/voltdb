@@ -376,9 +376,7 @@ public abstract class ExecutionEngine implements FastDeserializer.Deserializatio
         }
     }
 
-    public void traceLog(boolean isBegin,
-                         String name,
-                         String args)
+    public void traceLog(boolean isBegin, String name, String args)
     {
         if (m_traceFilename != null) {
             if (isBegin) {
