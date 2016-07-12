@@ -63,6 +63,7 @@ import org.voltdb.catalog.Statement;
 import org.voltdb.catalog.Table;
 import org.voltdb.client.BatchTimeoutOverrideType;
 import org.voltdb.client.ClientResponse;
+import org.voltdb.client.ProcedureInvocation;
 import org.voltdb.client.ProcedureInvocationType;
 import org.voltdb.common.Permission;
 import org.voltdb.compiler.AdHocPlannedStatement;
@@ -1112,7 +1113,8 @@ public final class InvocationDispatcher {
                                                     task.getBatchTimeout(),
                                                     VoltDB.instance().getReplicationRole() == ReplicationRole.REPLICA,
                                                     VoltDB.instance().getCatalogContext().cluster.getUseddlschema(),
-                                                    m_adhocCompletionHandler, user);
+                                                    m_adhocCompletionHandler, user,
+                                                    task.getTraceName());
         LocalObjectMessage work = new LocalObjectMessage( ahpw );
 
         m_mailbox.send(m_plannerSiteId, work);
@@ -1390,12 +1392,20 @@ public final class InvocationDispatcher {
         boolean isSinglePartition = plannedStmtBatch.isSinglePartitionCompatible() || m_isConfiguredForNonVoltDBBackend;
         int partition = -1;
 
+        String procName;
+        if (plannedStmtBatch.work.traceName == null) {
+            procName = "";
+        } else {
+            procName = ProcedureInvocation.TRACE_NAME_DELIMITER +
+                       plannedStmtBatch.work.traceName +
+                       ProcedureInvocation.TRACE_NAME_DELIMITER;
+        }
         if (isSinglePartition) {
             if (plannedStmtBatch.isReadOnly()) {
-                task.setProcName("@AdHoc_RO_SP");
+                procName += "@AdHoc_RO_SP";
             }
             else {
-                task.setProcName("@AdHoc_RW_SP");
+                procName += "@AdHoc_RW_SP";
             }
             int type = VoltType.NULL.getValue();
             // replicated table read is single-part without a partitioning param
@@ -1416,13 +1426,14 @@ public final class InvocationDispatcher {
         }
         else {
             if (plannedStmtBatch.isReadOnly()) {
-                task.setProcName("@AdHoc_RO_MP");
+                procName += "@AdHoc_RO_MP";
             }
             else {
-                task.setProcName("@AdHoc_RW_MP");
+                procName += "@AdHoc_RW_MP";
             }
             task.setParams(buf.array());
         }
+        task.setProcName(procName);
         task.clientHandle = plannedStmtBatch.clientHandle;
 
         ClientResponseImpl error = null;

@@ -31,11 +31,21 @@ import org.voltdb.utils.SerializationHelper;
  */
 public class ProcedureInvocation {
 
-    public static final Pattern PROC_NAME_PATTERN = Pattern.compile("^(#(?<tracename>.*)#)?(?<procname>.*)$");
+    public static final char TRACE_NAME_DELIMITER = '#';
+    public static final Pattern PROC_NAME_PATTERN =
+        Pattern.compile("^(" + TRACE_NAME_DELIMITER + "(?<tracename>.*)" + TRACE_NAME_DELIMITER + ")?(?<procname>.*)$");
     public static String extractProcName(String s) {
         final Matcher matcher = PROC_NAME_PATTERN.matcher(s);
         if (matcher.matches()) {
             return matcher.group("procname");
+        } else {
+            return null;
+        }
+    }
+    public static String extractTraceName(String s) {
+        final Matcher matcher = PROC_NAME_PATTERN.matcher(s);
+        if (matcher.matches()) {
+            return matcher.group("tracename");
         } else {
             return null;
         }

@@ -1514,7 +1514,7 @@ public class ProcedureRunner {
                                          m_txnState,
                                          m_site.getCorrespondingSiteId(),
                                          finalTask,
-                                         m_procedureName,
+                                         m_txnState.getInvocation().getFullProcName(),
                                          m_procNameToLoadForFragmentTasks);
 
        // iterate over all sql in the batch, filling out the above data structures

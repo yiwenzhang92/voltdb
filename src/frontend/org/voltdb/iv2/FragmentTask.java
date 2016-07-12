@@ -272,7 +272,7 @@ public class FragmentTask extends TransactionTask
                         m_txnState.m_spHandle,
                         m_txnState.uniqueId,
                         m_txnState.isReadOnly(),
-                        m_txnState.getInvocation() == null ? null : m_txnState.getInvocation().getTraceName())[0];
+                        m_fragmentMsg.getTraceName())[0];
 
                 if (hostLog.isTraceEnabled()) {
                     hostLog.l7dlog(Level.TRACE,

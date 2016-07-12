@@ -38,6 +38,7 @@ public class AdHocPlannerWork extends AsyncCompilerWork {
     // ad hoc statements queued within single-partition stored procs.
     final Object[] userPartitionKey;
     public final ExplainMode explainMode;
+    public final String traceName;
 
     public final int m_batchTimeout;
 
@@ -49,7 +50,8 @@ public class AdHocPlannerWork extends AsyncCompilerWork {
             String invocationName, ProcedureInvocationType type,
             long originalTxnId, long originalUniqueId, int batchTimeout,
             boolean onReplica, boolean useAdhocDDL,
-            AsyncCompilerWorkCompletionHandler completionHandler, AuthSystem.AuthUser user)
+            AsyncCompilerWorkCompletionHandler completionHandler, AuthSystem.AuthUser user,
+            String traceName)
     {
         super(replySiteId, false, clientHandle, connectionId,
               clientConnection == null ? "" : clientConnection.getHostnameAndIPAndPort(),
@@ -64,6 +66,7 @@ public class AdHocPlannerWork extends AsyncCompilerWork {
         this.inferPartitioning = inferPartitioning;
         this.userPartitionKey = userPartitionKey;
         this.m_batchTimeout = batchTimeout;
+        this.traceName = traceName;
     }
 
     /**
@@ -92,7 +95,8 @@ public class AdHocPlannerWork extends AsyncCompilerWork {
                 orig.onReplica,
                 orig.useAdhocDDL,
                 completionHandler,
-                orig.user);
+                orig.user,
+                orig.traceName);
         }
 
     /**
@@ -124,7 +128,7 @@ public class AdHocPlannerWork extends AsyncCompilerWork {
             false, (singlePartition ? new Object[1] /*any vector element will do, even null*/ : null),
             "@AdHoc_RW_MP", ProcedureInvocationType.ORIGINAL, 0, 0, BatchTimeoutOverrideType.NO_TIMEOUT,
             false, false, // don't allow adhoc DDL in this path
-            completionHandler, new AuthSystem.AuthDisabledUser());
+            completionHandler, new AuthSystem.AuthDisabledUser(), null);
     }
 
     @Override

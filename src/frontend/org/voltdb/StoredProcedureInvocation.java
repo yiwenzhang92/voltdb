@@ -150,6 +150,10 @@ public class StoredProcedureInvocation implements JSONString {
         return traceName;
     }
 
+    public String getFullProcName() {
+        return fullProcName;
+    }
+
     private void parseName()
     {
         final Matcher matcher = ProcedureInvocation.PROC_NAME_PATTERN.matcher(fullProcName);

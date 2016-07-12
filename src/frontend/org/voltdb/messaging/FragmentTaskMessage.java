@@ -34,6 +34,7 @@ import org.voltcore.utils.CoreUtils;
 import org.voltdb.ParameterSet;
 import org.voltdb.VoltDB;
 import org.voltdb.client.BatchTimeoutOverrideType;
+import org.voltdb.client.ProcedureInvocation;
 import org.voltdb.common.Constants;
 import org.voltdb.utils.Encoder;
 import org.voltdb.utils.LogKeys;
@@ -147,8 +148,12 @@ public class FragmentTaskMessage extends TransactionInfoBaseMessage
     byte[] m_procNameToLoad = null;
 
     // context for long running fragment status log messages
-    byte[] m_procedureName = null;
+    private byte[] m_fullProcedureName = null;
     int m_currentBatchIndex = 0;
+
+    // transient
+    private String m_procName = null;
+    private String m_traceName = null;
 
     int m_batchTimeout = BatchTimeoutOverrideType.NO_TIMEOUT;
 
@@ -202,7 +207,7 @@ public class FragmentTaskMessage extends TransactionInfoBaseMessage
         m_items = ftask.m_items;
         m_initiateTask = ftask.m_initiateTask;
         m_emptyForRestart = ftask.m_emptyForRestart;
-        m_procedureName = ftask.m_procedureName;
+        m_fullProcedureName = ftask.m_fullProcedureName;
         m_currentBatchIndex = ftask.m_currentBatchIndex;
         m_involvedPartitions = ftask.m_involvedPartitions;
         m_procNameToLoad = ftask.m_procNameToLoad;
@@ -219,7 +224,7 @@ public class FragmentTaskMessage extends TransactionInfoBaseMessage
             assert(it.getStoredProcedureName().equals(procedureName));
         }
         else {
-            m_procedureName = procedureName.getBytes(Charsets.UTF_8);
+            m_fullProcedureName = procedureName.getBytes(Charsets.UTF_8);
         }
     }
 
@@ -433,8 +438,29 @@ public class FragmentTaskMessage extends TransactionInfoBaseMessage
         if (initMsg != null) {
             return initMsg.m_invocation.getProcName();
         }
-        else if (m_procedureName != null) {
-            return new String(m_procedureName, Charsets.UTF_8);
+        else if (m_procName != null) {
+            return m_procName;
+        }
+        else if (m_fullProcedureName != null) {
+            m_procName = ProcedureInvocation.extractProcName(new String(m_fullProcedureName, Charsets.UTF_8));
+            return m_procName;
+        }
+        else {
+            return null;
+        }
+    }
+
+    public String getTraceName() {
+        Iv2InitiateTaskMessage initMsg = getInitiateTask();
+        if (initMsg != null) {
+            return initMsg.m_invocation.getTraceName();
+        }
+        else if (m_traceName != null) {
+            return m_traceName;
+        }
+        else if (m_fullProcedureName != null) {
+            m_traceName = ProcedureInvocation.extractTraceName(new String(m_fullProcedureName, Charsets.UTF_8));
+            return m_traceName;
         }
         else {
             return null;
@@ -582,8 +608,8 @@ public class FragmentTaskMessage extends TransactionInfoBaseMessage
 
         // short + str for proc name
         msgsize += 2;
-        if (m_procedureName != null) {
-            msgsize += m_procedureName.length;
+        if (m_fullProcedureName != null) {
+            msgsize += m_fullProcedureName.length;
         }
 
         // int for which batch (4)
@@ -733,13 +759,13 @@ public class FragmentTaskMessage extends TransactionInfoBaseMessage
         }
 
         // write procedure name
-        if (m_procedureName == null) {
+        if (m_fullProcedureName == null) {
             buf.putShort((short) -1);
         }
         else {
-            assert(m_procedureName.length <= Short.MAX_VALUE);
-            buf.putShort((short) m_procedureName.length);
-            buf.put(m_procedureName);
+            assert(m_fullProcedureName.length <= Short.MAX_VALUE);
+            buf.putShort((short) m_fullProcedureName.length);
+            buf.put(m_fullProcedureName);
         }
 
         // ints for batch context
@@ -864,11 +890,11 @@ public class FragmentTaskMessage extends TransactionInfoBaseMessage
         // read procedure name if there
         short procNameLen = buf.getShort();
         if (procNameLen >= 0) {
-            m_procedureName = new byte[procNameLen];
-            buf.get(m_procedureName);
+            m_fullProcedureName = new byte[procNameLen];
+            buf.get(m_fullProcedureName);
         }
         else {
-            m_procedureName = null;
+            m_fullProcedureName = null;
         }
 
         // ints for batch context
