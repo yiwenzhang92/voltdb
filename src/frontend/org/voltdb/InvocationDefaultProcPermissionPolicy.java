@@ -61,10 +61,10 @@ public class InvocationDefaultProcPermissionPolicy extends InvocationPermissionP
     @Override
     public ClientResponseImpl getErrorResponse(AuthUser user, StoredProcedureInvocation invocation, Procedure procedure) {
         authLog.l7dlog(Level.INFO,
-                LogKeys.auth_ClientInterface_LackingPermissionForProcedure.name(),
-                new String[] {user.m_name, invocation.procName}, null);
+                       LogKeys.auth_ClientInterface_LackingPermissionForProcedure.name(),
+                       new String[] {user.m_name, invocation.getProcName()}, null);
         return new ClientResponseImpl(ClientResponseImpl.UNEXPECTED_FAILURE,
-                new VoltTable[0], "User does not have permission to invoke " + invocation.procName,
+                new VoltTable[0], "User does not have permission to invoke " + invocation.getProcName(),
                 invocation.clientHandle);
     }
 
