@@ -24,12 +24,12 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.FutureTask;
 import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import org.json_voltpatches.JSONString;
 import org.json_voltpatches.JSONStringer;
 import org.voltcore.logging.VoltLogger;
 import org.voltdb.client.BatchTimeoutOverrideType;
+import org.voltdb.client.ProcedureInvocation;
 import org.voltdb.client.ProcedureInvocationType;
 import org.voltdb.common.Constants;
 import org.voltdb.messaging.FastDeserializer;
@@ -48,7 +48,6 @@ public class StoredProcedureInvocation implements JSONString {
     private String fullProcName = null;
 
     // Transient state
-    public static final Pattern PROC_NAME_PATTERN = Pattern.compile("^(#(.*)#)?(.*)$");
     private String traceName = null;
     private String procName = null;
 
@@ -81,7 +80,7 @@ public class StoredProcedureInvocation implements JSONString {
         copy.type = type;
         copy.clientHandle = clientHandle;
         copy.params = params;
-        copy.setProcName(getProcName());
+        copy.procName = procName;
         copy.traceName = traceName;
         copy.fullProcName = fullProcName;
         copy.originalTxnId = originalTxnId;
@@ -153,10 +152,10 @@ public class StoredProcedureInvocation implements JSONString {
 
     private void parseName()
     {
-        final Matcher matcher = PROC_NAME_PATTERN.matcher(fullProcName);
+        final Matcher matcher = ProcedureInvocation.PROC_NAME_PATTERN.matcher(fullProcName);
         if (matcher.matches()) {
-            traceName = matcher.group(2);
-            setProcName(matcher.group(3));
+            traceName = matcher.group("tracename");
+            procName = matcher.group("procname");
         }
     }
 

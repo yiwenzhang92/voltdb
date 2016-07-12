@@ -30,6 +30,7 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.voltdb.client.ProcedureInvocation;
 import org.voltdb.types.GeographyPointValue;
 import org.voltdb.types.GeographyValue;
 import org.voltdb.types.TimestampType;
@@ -1571,8 +1572,9 @@ public class SQLParser extends SQLPatternFactory
      */
     public static class ExecuteCallResults
     {
-        public String procedure = null;
-        public List<String> params = null;
+        private final String fullProcName;
+        private final String procedure;
+        public final List<String> params;
         public List<String> paramTypes = null;
 
         // Uppercase param.
@@ -1690,15 +1692,29 @@ public class SQLParser extends SQLPatternFactory
         }
 
         // No public constructor.
-        ExecuteCallResults()
-        {}
+        ExecuteCallResults(List<String> parsed)
+        {
+            this.params = parsed;
+            this.fullProcName = this.params.remove(0);
+            this.procedure = ProcedureInvocation.extractProcName(this.fullProcName);
+        }
 
         @Override
         public String toString() {
             return "ExecuteCallResults { "
-                            + "procedure: " + procedure + ", "
+                            + "procedure: " + getProcedure() + ", "
                             + "params: " + params + ", "
                             + "paramTypes: " + paramTypes + " }";
+        }
+
+        public String getProcedure()
+        {
+            return procedure;
+        }
+
+        public String getFullProcName()
+        {
+            return fullProcName;
         }
     }
 
@@ -1741,7 +1757,7 @@ public class SQLParser extends SQLPatternFactory
      */
     private static ExecuteCallResults parseExecuteCallInternal(
             String statement, Map<String,Map<Integer, List<String>>> procedures
-            ) throws SQLParser.Exception
+    ) throws SQLParser.Exception
     {
         Matcher matcher = ExecuteCallPreamble.matcher(statement);
         if ( ! matcher.lookingAt()) {
@@ -1749,43 +1765,41 @@ public class SQLParser extends SQLPatternFactory
         }
         String commandWordTerminator = matcher.group(1);
         if (OneWhitespace.matcher(commandWordTerminator).matches() ||
-                // Might as well accept a comma delimiter anywhere in the exec command,
-                // even near the start
-                commandWordTerminator.equals(",")) {
-        ExecuteCallResults results = new ExecuteCallResults();
-        String rawParams = statement.substring(matcher.end());
-        results.params = parseExecParameters(rawParams);
-        results.procedure = results.params.remove(0);
-        // TestSqlCmdInterface passes procedures==null because it
-        // doesn't need/want the param types.
-        if (procedures == null) {
-            results.paramTypes = null;
-            return results;
-        }
-        Map<Integer, List<String>> signature = procedures.get(results.procedure);
-        if (signature == null) {
-            throw new SQLParser.Exception("Undefined procedure: %s", results.procedure);
-        }
-
-        results.paramTypes = signature.get(results.params.size());
-        if (results.paramTypes == null || results.params.size() != results.paramTypes.size()) {
-            String expectedSizes = "";
-            for (Integer expectedSize : signature.keySet()) {
-                expectedSizes += expectedSize + ", ";
+            // Might as well accept a comma delimiter anywhere in the exec command,
+            // even near the start
+            commandWordTerminator.equals(",")) {
+            String rawParams = statement.substring(matcher.end());
+            final ExecuteCallResults results = new ExecuteCallResults(parseExecParameters(rawParams));
+            // TestSqlCmdInterface passes procedures==null because it
+            // doesn't need/want the param types.
+            if (procedures == null) {
+                results.paramTypes = null;
+                return results;
             }
-            throw new SQLParser.Exception(
-                    "Invalid parameter count for procedure: %s (expected: %s received: %d)",
-                    results.procedure, expectedSizes, results.params.size());
+            Map<Integer, List<String>> signature = procedures.get(results.getProcedure());
+            if (signature == null) {
+                throw new SQLParser.Exception("Undefined procedure: %s", results.getProcedure());
+            }
+
+            results.paramTypes = signature.get(results.params.size());
+            if (results.paramTypes == null || results.params.size() != results.paramTypes.size()) {
+                String expectedSizes = "";
+                for (Integer expectedSize : signature.keySet()) {
+                    expectedSizes += expectedSize + ", ";
+                }
+                throw new SQLParser.Exception(
+                                             "Invalid parameter count for procedure: %s (expected: %s received: %d)",
+                                             results.getProcedure(), expectedSizes, results.params.size());
             }
             return results;
         }
         if (commandWordTerminator.equals(";")) {
             // EOL or ; reached before subcommand
             throw new SQLParser.Exception(
-                    "Incomplete EXECUTE command. EXECUTE requires a procedure name argument.");
+                                         "Incomplete EXECUTE command. EXECUTE requires a procedure name argument.");
         }
         throw new SQLParser.Exception(
-                "Invalid EXECUTE command. unexpected input: '" + commandWordTerminator + "'.");
+                                     "Invalid EXECUTE command. unexpected input: '" + commandWordTerminator + "'.");
     }
 
     /**

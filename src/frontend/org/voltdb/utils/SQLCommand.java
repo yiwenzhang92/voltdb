@@ -751,7 +751,7 @@ public class SQLCommand
             if (execCallResults != null) {
                 Object[] objectParams = execCallResults.getParameterObjects();
 
-                if (execCallResults.procedure.equals("@UpdateApplicationCatalog")) {
+                if (execCallResults.getProcedure().equals("@UpdateApplicationCatalog")) {
                     File catfile = null;
                     if (objectParams[0] != null) {
                         catfile = new File((String)objectParams[0]);
@@ -765,7 +765,7 @@ public class SQLCommand
                     // Need to update the stored procedures after a catalog change (could have added/removed SPs!).  ENG-3726
                     loadStoredProcedures(Procedures, Classlist);
                 }
-                else if (execCallResults.procedure.equals("@UpdateClasses")) {
+                else if (execCallResults.getProcedure().equals("@UpdateClasses")) {
                     File jarfile = null;
                     if (objectParams[0] != null) {
                         jarfile = new File((String)objectParams[0]);
@@ -776,11 +776,11 @@ public class SQLCommand
                 }
                 else {
                     // @SnapshotDelete needs array parameters.
-                    if (execCallResults.procedure.equals("@SnapshotDelete")) {
+                    if (execCallResults.getProcedure().equals("@SnapshotDelete")) {
                         objectParams[0] = new String[] { (String)objectParams[0] };
                         objectParams[1] = new String[] { (String)objectParams[1] };
                     }
-                    printResponse(callProcedureHelper(execCallResults.procedure, objectParams));
+                    printResponse(callProcedureHelper(execCallResults.getFullProcName(), objectParams));
                 }
                 return;
             }
