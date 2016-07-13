@@ -33,6 +33,7 @@ import org.voltdb.messaging.InitiateResponseMessage;
 import org.voltdb.messaging.Iv2InitiateTaskMessage;
 import org.voltdb.rejoin.TaskLog;
 import org.voltdb.utils.LogKeys;
+import org.voltdb.utils.VoltTrace;
 
 /**
  * Implements the single partition procedure ProcedureTask.
@@ -57,6 +58,17 @@ public class SpProcedureTask extends ProcedureTask
     {
        super(initiator, procName, new SpTransactionState(msg), queue);
        m_drGateway = drGateway;
+    }
+
+    @Override
+    protected void durabilityTraceEnd() {
+        final Iv2InitiateTaskMessage msg = (Iv2InitiateTaskMessage) getTransactionState().getNotice();
+        if (msg.getStoredProcedureInvocation().getTraceName() != null) {
+            VoltTrace.endAsync(msg.getStoredProcedureInvocation().getTraceName(),
+                               "durability " + CoreUtils.hsIdToString(m_initiator.getHSId()),
+                               "spi",
+                               msg.getSpHandle());
+        }
     }
 
     /** Run is invoked by a run-loop to execute this transaction. */

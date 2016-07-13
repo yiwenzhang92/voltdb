@@ -75,6 +75,16 @@ public class FragmentTask extends TransactionTask
     }
 
     @Override
+    protected void durabilityTraceEnd() {
+        if (m_fragmentMsg.getTraceName() != null) {
+            VoltTrace.endAsync(m_fragmentMsg.getTraceName(),
+                               "durability " + CoreUtils.hsIdToString(m_initiator.getHSId()),
+                               "spi",
+                               m_fragmentMsg.getSpHandle());
+        }
+    }
+
+    @Override
     public void run(SiteProcedureConnection siteConnection)
     {
         waitOnDurabilityBackpressureFuture();

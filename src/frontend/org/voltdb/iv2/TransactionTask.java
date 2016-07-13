@@ -60,21 +60,11 @@ public abstract class TransactionTask extends SiteTasker
             } catch (Throwable t) {
                 VoltDB.crashLocalVoltDB("Unexpected exception waiting for durability future", true, t);
             }
-
-            if (this instanceof SpProcedureTask) {
-                final Iv2InitiateTaskMessage msg = (Iv2InitiateTaskMessage) this.getTransactionState().getNotice();
-                if (msg.getStoredProcedureInvocation().getTraceName() != null) {
-                    VoltTrace.endAsync(msg.getStoredProcedureInvocation().getTraceName(),
-                                       "durability", "spi", msg.getSpHandle());
-                }
-            } else if (this instanceof FragmentTask) {
-                if (((FragmentTask) this).m_fragmentMsg.getTraceName() != null) {
-                    VoltTrace.endAsync(((FragmentTask) this).m_fragmentMsg.getTraceName(),
-                                       "durability", "spi", ((FragmentTask) this).m_fragmentMsg.getSpHandle());
-                }
-            }
+            durabilityTraceEnd();
         }
     }
+
+    protected void durabilityTraceEnd() {}
 
     @Override
     abstract public void run(SiteProcedureConnection siteConnection);
