@@ -87,7 +87,7 @@ public class VoltTrace {
         private TraceEventType m_type;
         private String m_name;
         private String m_category;
-        private Long m_id;
+        private String m_id;
         private long m_tid;
         private long m_nanos;
         private long m_ts;
@@ -102,7 +102,7 @@ public class VoltTrace {
                 TraceEventType type,
                 String name,
                 String category,
-                Long asyncId,
+                String asyncId,
                 String... args) {
             m_fileName = fileName;
             m_type = type;
@@ -172,11 +172,11 @@ public class VoltTrace {
             m_category = cat;
         }
 
-        public Long getId() {
+        public String getId() {
             return m_id;
         }
 
-        public void setId(Long id) {
+        public void setId(String id) {
             m_id = id;
         }
 
@@ -266,15 +266,15 @@ public class VoltTrace {
         s_tracer.queueEvent(new TraceEvent(fileName, TraceEventType.DURATION_END, null, null, null));
     }
 
-    public static void beginAsync(String fileName, String name, String category, long id, String... args) {
-        s_tracer.queueEvent(new TraceEvent(fileName, TraceEventType.ASYNC_BEGIN, name, category, id, args));
+    public static void beginAsync(String fileName, String name, String category, Object id, String... args) {
+        s_tracer.queueEvent(new TraceEvent(fileName, TraceEventType.ASYNC_BEGIN, name, category, id.toString(), args));
     }
 
-    public static void endAsync(String fileName, String name, String category, long id, String... args) {
-        s_tracer.queueEvent(new TraceEvent(fileName, TraceEventType.ASYNC_END, name, category, id, args));
+    public static void endAsync(String fileName, String name, String category, Object id, String... args) {
+        s_tracer.queueEvent(new TraceEvent(fileName, TraceEventType.ASYNC_END, name, category, id.toString(), args));
     }
-    public static void instantAsync(String fileName, String name, String category, long id, String... args) {
-        s_tracer.queueEvent(new TraceEvent(fileName, TraceEventType.ASYNC_INSTANT, name, category, id, args));
+    public static void instantAsync(String fileName, String name, String category, Object id, String... args) {
+        s_tracer.queueEvent(new TraceEvent(fileName, TraceEventType.ASYNC_INSTANT, name, category, id.toString(), args));
     }
 
     public static void close(String fileName) {

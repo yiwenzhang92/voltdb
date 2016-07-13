@@ -31,7 +31,7 @@ import org.codehaus.jackson.map.ObjectMapper;
  */
 public class TraceFileWriter implements Runnable {
     private static final int MAX_OPEN_TRACES = 16;
-    
+
     private final ObjectMapper m_jsonMapper = new ObjectMapper();
     private final VoltTrace m_voltTrace;
     private boolean m_shutdown;
@@ -104,7 +104,7 @@ public class TraceFileWriter implements Runnable {
             // TODO: log
             return;
         }
-        
+
         if (m_fileWriters.size() >= MAX_OPEN_TRACES) {
             //TODO: log
             return;

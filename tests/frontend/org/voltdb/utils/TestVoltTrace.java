@@ -43,7 +43,7 @@ public class TestVoltTrace extends TestCase {
 
     private static final String FILE_NAME_PREFIX = "tracetest";
     private static final int FILE_COUNT = 3;
-    
+
     private ObjectMapper m_mapper = new ObjectMapper();
 
     @Override
@@ -112,34 +112,34 @@ public class TestVoltTrace extends TestCase {
                 break;
             }
         }
-        
+
         return event;
     }
-    
+
     private VoltTrace.TraceEvent randomDurationBegin(String fileName) {
         return new VoltTrace.TraceEvent(fileName, VoltTrace.TraceEventType.DURATION_BEGIN,
                 "name"+m_random.nextInt(5), "cat"+m_random.nextInt(5), null, randomArgs());
     }
-    
+
     private VoltTrace.TraceEvent randomDurationEnd(String fileName) {
         return new VoltTrace.TraceEvent(fileName, VoltTrace.TraceEventType.DURATION_END,
                 null, null, null);
     }
-    
+
     private VoltTrace.TraceEvent randomAsync(String fileName, boolean begin) {
         VoltTrace.TraceEventType type = (begin) ?
                 VoltTrace.TraceEventType.ASYNC_BEGIN : VoltTrace.TraceEventType.ASYNC_END;
         return new VoltTrace.TraceEvent(fileName, type, "name"+m_random.nextInt(5),
-                "cat"+m_random.nextInt(5), m_random.nextLong(), randomArgs());
+                "cat"+m_random.nextInt(5), Long.toString(m_random.nextLong()), randomArgs());
     }
-    
+
     private VoltTrace.TraceEvent randomInstant(String fileName, boolean async) {
         VoltTrace.TraceEventType type = (async) ?
                 VoltTrace.TraceEventType.ASYNC_INSTANT : VoltTrace.TraceEventType.INSTANT;
         Long id = (async) ? m_random.nextLong() : null;
         return new VoltTrace.TraceEvent(fileName, type,
                 "name"+m_random.nextInt(5), "cat"+m_random.nextInt(5),
-                id, randomArgs());
+                Long.toString(id), randomArgs());
     }
 
     private static String[] s_metadataNames = { "process_name", "process_labels", "process_sort_index",
@@ -150,7 +150,7 @@ public class TestVoltTrace extends TestCase {
         return new VoltTrace.TraceEvent(fileName, VoltTrace.TraceEventType.METADATA, name, null, null,
                 randomArgs());
     }
-    
+
     private static String[] s_argKeys = { "name", "dest", "ciHandle", "txnid", "commit", "key1", "keyn" };
     private String[] randomArgs() {
         int count = m_random.nextInt(4);
@@ -160,10 +160,10 @@ public class TestVoltTrace extends TestCase {
             args[i*2] = key;
             args[i*2+1] = key+"-val";
         }
-        
+
         return args;
     }
-    
+
     private void verifyFileContents(List<VoltTrace.TraceEvent> expectedList, String outfile)
         throws IOException {
         int numRead = 0;
@@ -174,7 +174,7 @@ public class TestVoltTrace extends TestCase {
             if (line.equals("]") || line.equals("[")) {
                 continue;
             }
-            
+
             if (line.charAt(line.length()-1)==',') {
                 line = line.substring(0, line.length()-1);
             }
@@ -184,7 +184,7 @@ public class TestVoltTrace extends TestCase {
         reader.close();
         assertEquals(expectedList.size(), numRead);
     }
-    
+
     private void compare(VoltTrace.TraceEvent expected, VoltTrace.TraceEvent actual) {
         assertEquals(expected.getCategory(), actual.getCategory());
         assertEquals(expected.getName(), actual.getName());
@@ -200,11 +200,11 @@ public class TestVoltTrace extends TestCase {
     public class SenderRunnable implements Runnable {
         private final String m_fileName;
         private List<VoltTrace.TraceEvent> m_sentList = new ArrayList<>();
-        
+
         public SenderRunnable(String fileName) {
             m_fileName = fileName;
         }
-        
+
         public void run() {
             try {
                 for (int i=0; i<10; i++) {
@@ -249,7 +249,7 @@ public class TestVoltTrace extends TestCase {
                 t.printStackTrace();
             }
         }
-        
+
         public List<VoltTrace.TraceEvent> getSentList() {
             return m_sentList;
         }
