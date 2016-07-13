@@ -16,8 +16,6 @@
  */
 package org.voltdb.utils;
 
-import org.codehaus.jackson.map.ObjectMapper;
-
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
@@ -25,14 +23,20 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.codehaus.jackson.map.ObjectMapper;
+
+
 /**
  *TODO:
  */
 public class TraceFileWriter implements Runnable {
+    private static final int MAX_OPEN_TRACES = 16;
+    
     private final ObjectMapper m_jsonMapper = new ObjectMapper();
     private final VoltTrace m_voltTrace;
     private boolean m_shutdown;
     private Map<String, BufferedWriter> m_fileWriters = new HashMap<>();
+    private Map<String, Long> m_syncNanos = new HashMap<>();
 
     public TraceFileWriter(VoltTrace voltTrace) {
         m_voltTrace = voltTrace;
@@ -53,6 +57,7 @@ public class TraceFileWriter implements Runnable {
                 }
                 BufferedWriter bw = m_fileWriters.get(event.getFileName());
                 if (bw != null) {
+                    event.setSyncNanos(m_syncNanos.get(event.getFileName()));
                     String json = m_jsonMapper.writeValueAsString(event);
                     if (!firstRow) bw.write(",");
                     bw.newLine();
@@ -80,11 +85,13 @@ public class TraceFileWriter implements Runnable {
             bw.newLine();
             bw.write("]");
             bw.newLine();
+            bw.flush();
             bw.close();
         } catch(IOException e) {
             //TODO: Debug log
         }
         m_fileWriters.remove(event.getFileName());
+        m_syncNanos.remove(event.getFileName());
     }
 
     private void startTraceFile(VoltTrace.TraceEvent event) {
@@ -97,13 +104,20 @@ public class TraceFileWriter implements Runnable {
             // TODO: log
             return;
         }
+        
+        if (m_fileWriters.size() >= MAX_OPEN_TRACES) {
+            //TODO: log
+            return;
+        }
 
         try {
             //TODO: Path and full file name
             // Uses the default platform encoding for now.
             bw = new BufferedWriter(new FileWriter(event.getFileName()));
             m_fileWriters.put(event.getFileName(), bw);
+            m_syncNanos.put(event.getFileName(), event.getNanos());
             bw.write("[");
+            bw.flush();
         } catch(IOException e) {
             //TODO: rate limited log
         }

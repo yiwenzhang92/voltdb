@@ -89,7 +89,8 @@ public class VoltTrace {
         private String m_category;
         private Long m_id;
         private long m_tid;
-        private long m_micros;
+        private long m_nanos;
+        private long m_ts;
         private String[] m_argsArr;
         private Map<String, String> m_args;
 
@@ -103,7 +104,6 @@ public class VoltTrace {
                 String category,
                 Long asyncId,
                 String... args) {
-            this();
             m_fileName = fileName;
             m_type = type;
             m_name = name;
@@ -111,7 +111,7 @@ public class VoltTrace {
             m_id = asyncId;
             m_argsArr = args;
             m_tid = Thread.currentThread().getId();
-            m_micros = System.nanoTime()/1000;
+            m_nanos = System.nanoTime()/1000;
         }
 
         private void mapFromArgArray() {
@@ -124,6 +124,10 @@ public class VoltTrace {
                 if (i+1 == m_argsArr.length) break;
                 m_args.put(m_argsArr[i], m_argsArr[i+1]);
             }
+        }
+
+        public void setSyncNanos(long syncNanos) {
+            m_ts = (m_nanos - syncNanos)/1000;
         }
 
         @JsonIgnore
@@ -145,6 +149,7 @@ public class VoltTrace {
             return m_type.getTypeChar();
         }
 
+        @JsonProperty("ph")
         public void setTypeChar(char ch) {
             m_type = TraceEventType.fromTypeChar(ch);
         }
@@ -162,6 +167,7 @@ public class VoltTrace {
             return m_category;
         }
 
+        @JsonProperty("cat")
         public void setCategory(String cat) {
             m_category = cat;
         }
@@ -189,12 +195,17 @@ public class VoltTrace {
             m_tid = tid;
         }
 
+        @JsonIgnore
+        public long getNanos() {
+            return m_nanos;
+        }
+
         public long getTs() {
-            return m_micros;
+            return m_ts;
         }
 
         public void setTs(long ts) {
-            m_micros = ts;
+            m_ts = ts;
         }
 
         public Map<String, String> getArgs() {
