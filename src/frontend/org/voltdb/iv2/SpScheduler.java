@@ -698,10 +698,6 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
     // Pass a response through the duplicate counters.
     public void handleInitiateResponseMessage(InitiateResponseMessage message)
     {
-        if (message.getTraceName() != null) {
-            VoltTrace.endAsync(message.getTraceName(), "initSP", "spi", message.getTxnId());
-        }
-
         /**
          * A shortcut read is a read operation sent to any replica and completed with no
          * confirmation or communication with other replicas. In a partition scenario, it's
@@ -713,6 +709,9 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
         // Avoid all the lookup below.
         // Also, don't update the truncation handle, since it won't have meaning for anyone.
         if (shortcutRead) {
+            if (message.getTraceName() != null) {
+                VoltTrace.endAsync(message.getTraceName(), "initSP", "spi", message.getTxnId());
+            }
             // the initiatorHSId is the ClientInterface mailbox. Yeah. I know.
             m_mailbox.send(message.getInitiatorHSId(), message);
             return;
@@ -724,6 +723,9 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
         if (counter != null) {
             int result = counter.offer(message);
             if (result == DuplicateCounter.DONE) {
+                if (message.getTraceName() != null) {
+                    VoltTrace.endAsync(message.getTraceName(), "initSP", "spi", message.getTxnId());
+                }
                 m_duplicateCounters.remove(dcKey);
                 m_repairLogTruncationHandle = spHandle;
                 m_mailbox.send(counter.m_destinationId, counter.getLastResponse());
@@ -733,6 +735,9 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
             }
         }
         else {
+            if (message.getTraceName() != null) {
+                VoltTrace.endAsync(message.getTraceName(), "initSP", "spi", message.getTxnId());
+            }
             // the initiatorHSId is the ClientInterface mailbox. Yeah. I know.
             m_repairLogTruncationHandle = spHandle;
             m_mailbox.send(message.getInitiatorHSId(), message);
