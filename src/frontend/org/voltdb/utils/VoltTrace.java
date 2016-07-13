@@ -127,7 +127,7 @@ public class VoltTrace {
         }
 
         public void setSyncNanos(long syncNanos) {
-            m_ts = (m_nanos - syncNanos)/1000;
+            m_ts = m_nanos - syncNanos;
         }
 
         @JsonIgnore
