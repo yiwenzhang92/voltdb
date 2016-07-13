@@ -120,7 +120,7 @@ public class VoltTrace {
             if (m_argsArr == null) {
                 return;
             }
-            
+
             for (int i=0; i<m_argsArr.length; i+=2) {
                 if (i+1 == m_argsArr.length) break;
                 m_args.put(m_argsArr[i], m_argsArr[i+1]);
@@ -244,8 +244,8 @@ public class VoltTrace {
         s_tracer.queueEvent(new TraceEvent(fileName, TraceEventType.METADATA, name, null, null, args));
     }
 
-    public static void instant(String fileName, String name, String category, long id, String... args) {
-        s_tracer.queueEvent(new TraceEvent(fileName, TraceEventType.INSTANT, name, category, id, args));
+    public static void instant(String fileName, String name, String category, String... args) {
+        s_tracer.queueEvent(new TraceEvent(fileName, TraceEventType.INSTANT, name, category, null, args));
     }
 
     public static void beginDuration(String fileName, String name, String category, String... args) {
