@@ -50,12 +50,16 @@ public class InitiateResponseMessage extends VoltMessage {
     private StoredProcedureInvocation m_invocation;
     private Pair<Long, byte[]> m_currentHashinatorConfig;
 
+    // Transient state. Pass the trace name back to the initiator for logging
+    private final String m_traceName;
+
     /** Empty constructor for de-serialization */
     public InitiateResponseMessage()
     {
         m_initiatorHSId = -1;
         m_coordinatorHSId = -1;
         m_subject = Subject.DEFAULT.getId();
+        m_traceName = null;
     }
 
     /**
@@ -70,6 +74,7 @@ public class InitiateResponseMessage extends VoltMessage {
         m_clientInterfaceHandle = task.getClientInterfaceHandle();
         m_connectionId = task.getConnectionId();
         m_readOnly = task.isReadOnly();
+        m_traceName = task.getStoredProcedureInvocation().getTraceName();
     }
 
     /**
@@ -84,6 +89,7 @@ public class InitiateResponseMessage extends VoltMessage {
         m_subject = Subject.DEFAULT.getId();
         m_clientInterfaceHandle = sentinel.getClientInterfaceHandle();
         m_connectionId = sentinel.getConnectionId();
+        m_traceName = null;
     }
 
     /**
@@ -101,6 +107,7 @@ public class InitiateResponseMessage extends VoltMessage {
         m_clientInterfaceHandle = Long.MIN_VALUE;
         m_connectionId = Long.MIN_VALUE;
         m_readOnly = task.isReadOnly();
+        m_traceName = null;
     }
 
     public void setClientHandle(long clientHandle) {
@@ -141,6 +148,10 @@ public class InitiateResponseMessage extends VoltMessage {
 
     public void setRecovering(boolean recovering) {
         m_recovering = recovering;
+    }
+
+    public String getTraceName() {
+        return m_traceName;
     }
 
     public boolean isMispartitioned() {

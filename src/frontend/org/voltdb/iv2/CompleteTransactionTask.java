@@ -19,6 +19,7 @@ package org.voltdb.iv2;
 
 import java.io.IOException;
 
+import org.voltcore.utils.CoreUtils;
 import org.voltdb.PartitionDRGateway;
 import org.voltdb.SiteProcedureConnection;
 import org.voltdb.StoredProcedureInvocation;
@@ -27,6 +28,7 @@ import org.voltdb.messaging.CompleteTransactionMessage;
 import org.voltdb.messaging.FragmentTaskMessage;
 import org.voltdb.messaging.Iv2InitiateTaskMessage;
 import org.voltdb.rejoin.TaskLog;
+import org.voltdb.utils.VoltTrace;
 
 public class CompleteTransactionTask extends TransactionTask
 {
@@ -47,6 +49,13 @@ public class CompleteTransactionTask extends TransactionTask
     public void run(SiteProcedureConnection siteConnection)
     {
         hostLog.debug("STARTING: " + this);
+        final FragmentTaskMessage frag = (FragmentTaskMessage) m_txnState.getNotice();
+        if (frag.getTraceName() != null) {
+            VoltTrace.beginDuration(frag.getTraceName(), "execCompleteTxn", "spsite",
+                                    "txnId", TxnEgo.txnIdToString(getTxnId()),
+                                    "partition", Integer.toString(siteConnection.getCorrespondingPartitionId()));
+        }
+
         if (!m_txnState.isReadOnly()) {
             // the truncation point token SHOULD be part of m_txn. However, the
             // legacy interaces don't work this way and IV2 hasn't changed this
@@ -72,6 +81,10 @@ public class CompleteTransactionTask extends TransactionTask
             // for the restarted fragments.
             m_txnState.setBeginUndoToken(Site.kInvalidUndoToken);
             hostLog.debug("RESTART: " + this);
+        }
+
+        if (frag.getTraceName() != null) {
+            VoltTrace.endDuration(frag.getTraceName());
         }
     }
 

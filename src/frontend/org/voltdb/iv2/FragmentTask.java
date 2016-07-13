@@ -41,6 +41,7 @@ import org.voltdb.rejoin.TaskLog;
 import org.voltdb.utils.Encoder;
 import org.voltdb.utils.LogKeys;
 import org.voltdb.utils.VoltTableUtil;
+import org.voltdb.utils.VoltTrace;
 
 public class FragmentTask extends TransactionTask
 {
@@ -79,6 +80,11 @@ public class FragmentTask extends TransactionTask
         waitOnDurabilityBackpressureFuture();
         if (hostLog.isDebugEnabled()) {
             hostLog.debug("STARTING: " + this);
+        }
+        if (m_fragmentMsg.getTraceName() != null) {
+            VoltTrace.beginDuration(m_fragmentMsg.getTraceName(), "runFragmentTask", "spsite",
+                                    "txnId", TxnEgo.txnIdToString(getTxnId()),
+                                    "partition", Integer.toString(siteConnection.getCorrespondingPartitionId()));
         }
 
         // if this has a procedure name from the initiation bundled,
@@ -119,6 +125,9 @@ public class FragmentTask extends TransactionTask
 
         if (hostLog.isDebugEnabled()) {
             hostLog.debug("COMPLETE: " + this);
+        }
+        if (m_fragmentMsg.getTraceName() != null) {
+            VoltTrace.endDuration(m_fragmentMsg.getTraceName());
         }
     }
 

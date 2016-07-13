@@ -88,6 +88,7 @@ import com.google_voltpatches.common.base.Throwables;
 import com.google_voltpatches.common.collect.ImmutableMap;
 import com.google_voltpatches.common.util.concurrent.ListenableFuture;
 import com.google_voltpatches.common.util.concurrent.ListenableFutureTask;
+import org.voltdb.utils.VoltTrace;
 
 public final class InvocationDispatcher {
 
@@ -264,6 +265,11 @@ public final class InvocationDispatcher {
         final long nowNanos = System.nanoTime();
                 // Deserialize the client's request and map to a catalog stored procedure
         final CatalogContext catalogContext = m_catalogContext.get();
+
+        if (task.getTraceName() != null) {
+            VoltTrace.meta(task.getTraceName(), "process_name", "name", CoreUtils.getHostnameOrAddress());
+            VoltTrace.beginAsync(task.getTraceName(), "recvTxn", "ci", task.getClientHandle());
+        }
 
         Procedure catProc = getProcedureFromName(task.getProcName(), catalogContext);
 
@@ -762,7 +768,7 @@ public final class InvocationDispatcher {
         int pid = (Integer) invocation.getParameterAtIndex(0);
         final long initiatorHSId = m_cartographer.getHSIdForSinglePartitionMaster(pid);
         long handle = cihm.getHandle(true, pid, invocation.getClientHandle(), invocation.getSerializedSize(),
-                nowNanos, invocation.getProcName(), initiatorHSId, true, false);
+                nowNanos, invocation.getProcName(), null, initiatorHSId, true, false);
 
         /*
          * Sentinels will be deduped by ReplaySequencer. They don't advance the
@@ -1100,6 +1106,11 @@ public final class InvocationDispatcher {
     private final void dispatchAdHocCommon(StoredProcedureInvocation task,
             InvocationClientHandler handler, Connection ccxn, ExplainMode explainMode,
             String sql, Object[] userParams, Object[] userPartitionKey, AuthSystem.AuthUser user) {
+        if (task.getTraceName() != null) {
+            VoltTrace.beginAsync(task.getTraceName(), "planAdHoc", "ci", task.getClientHandle(),
+                                 "sql", sql);
+        }
+
         List<String> sqlStatements = SQLLexer.splitStatements(sql);
         String[] stmtsArray = sqlStatements.toArray(new String[sqlStatements.size()]);
 
@@ -1139,6 +1150,10 @@ public final class InvocationDispatcher {
                     if (result instanceof AdHocPlannedStmtBatch) {
                         final AdHocPlannedStmtBatch plannedStmtBatch = (AdHocPlannedStmtBatch) result;
                         ExplainMode explainMode = plannedStmtBatch.getExplainMode();
+
+                        if (plannedStmtBatch.work.traceName != null) {
+                            VoltTrace.endAsync(plannedStmtBatch.work.traceName, "planAdHoc", "ci", plannedStmtBatch.clientHandle);
+                        }
 
                         // assume all stmts have the same catalog version
                         if ((plannedStmtBatch.getPlannedStatementCount() > 0) &&
@@ -1572,7 +1587,7 @@ public final class InvocationDispatcher {
         }
 
         long handle = cihm.getHandle(isSinglePartition, partition, invocation.getClientHandle(),
-                messageSize, nowNanos, invocation.getProcName(), initiatorHSId, isReadOnly, isShortCircuitRead);
+                messageSize, nowNanos, invocation.getProcName(), invocation.getTraceName(), initiatorHSId, isReadOnly, isShortCircuitRead);
 
         Iv2InitiateTaskMessage workRequest =
             new Iv2InitiateTaskMessage(m_siteId,
@@ -1586,6 +1601,13 @@ public final class InvocationDispatcher {
                     handle,
                     connectionId,
                     isForReplay);
+
+        if (invocation.getTraceName() != null) {
+            VoltTrace.instantAsync(invocation.getTraceName(), "initTxn", "ci", invocation.getClientHandle(),
+                                   "ciHandle", Long.toString(handle),
+                                   "partition", Integer.toString(partition),
+                                   "dest", CoreUtils.hsIdToString(initiatorHSId));
+        }
 
         Iv2Trace.logCreateTransaction(workRequest);
         m_mailbox.send(initiatorHSId, workRequest);

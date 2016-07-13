@@ -62,6 +62,7 @@ import org.voltdb.messaging.MultiPartitionParticipantMessage;
 import com.google_voltpatches.common.primitives.Ints;
 import com.google_voltpatches.common.primitives.Longs;
 import com.google_voltpatches.common.util.concurrent.ListenableFuture;
+import org.voltdb.utils.VoltTrace;
 
 public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
 {
@@ -555,6 +556,15 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
      */
     private void doLocalInitiateOffer(Iv2InitiateTaskMessage msg)
     {
+        final String traceName = msg.getStoredProcedureInvocation().getTraceName();
+        if (traceName != null) {
+            VoltTrace.meta(traceName, "process_name", "name", CoreUtils.getHostnameOrAddress());
+            VoltTrace.beginAsync(traceName, "initSP", "spi", msg.getTxnId(),
+                                 "txnId", TxnEgo.txnIdToString(msg.getTxnId()),
+                                 "partition", Integer.toString(m_partitionId),
+                                 "hsId", CoreUtils.hsIdToString(m_mailbox.getHSId()));
+        }
+
         /**
          * A shortcut read is a read operation sent to any replica and completed with no
          * confirmation or communication with other replicas. In a partition scenario, it's
@@ -565,6 +575,12 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
         final SpProcedureTask task =
             new SpProcedureTask(m_mailbox, procedureName, m_pendingTasks, msg, m_drGateway);
         if (!shortcutRead) {
+            if (traceName != null) {
+                VoltTrace.beginAsync(traceName, "durability", "spi", msg.getSpHandle(),
+                                     "txnId", TxnEgo.txnIdToString(msg.getTxnId()),
+                                     "partition", Integer.toString(m_partitionId));
+            }
+
             ListenableFuture<Object> durabilityBackpressureFuture =
                     m_cl.log(msg, msg.getSpHandle(), null, m_durabilityListener, task);
             //Durability future is always null for sync command logging
@@ -680,6 +696,10 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
     // Pass a response through the duplicate counters.
     public void handleInitiateResponseMessage(InitiateResponseMessage message)
     {
+        if (message.getTraceName() != null) {
+            VoltTrace.endAsync(message.getTraceName(), "initSP", "spi", message.getTxnId());
+        }
+
         /**
          * A shortcut read is a read operation sent to any replica and completed with no
          * confirmation or communication with other replicas. In a partition scenario, it's
@@ -727,6 +747,13 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
         long newSpHandle = getMaxTaskedSpHandle();
         Iv2Trace.logFragmentTaskMessage(message.getFragmentTaskMessage(),
                 m_mailbox.getHSId(), newSpHandle, true);
+        if (message.getFragmentTaskMessage().getTraceName() != null) {
+            VoltTrace.beginAsync(message.getFragmentTaskMessage().getTraceName(), "recvFragment", "spi", newSpHandle,
+                                 "txnId", TxnEgo.txnIdToString(message.getTxnId()),
+                                 "partition", Integer.toString(m_partitionId),
+                                 "hsId", CoreUtils.hsIdToString(m_mailbox.getHSId()));
+        }
+
         TransactionState txn = m_outstandingTxns.get(message.getTxnId());
 
         if (txn == null) {
@@ -739,7 +766,7 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
             txn = new BorrowTransactionState(newSpHandle, message);
         }
 
-
+        message.getFragmentTaskMessage().setSpHandle(newSpHandle);
         if (message.getFragmentTaskMessage().isSysProcTask()) {
             final SysprocFragmentTask task =
                 new SysprocFragmentTask(m_mailbox, (ParticipantTransactionState)txn,
@@ -845,6 +872,15 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
      */
     private void doLocalFragmentOffer(FragmentTaskMessage msg)
     {
+        if (msg.getTraceName() != null) {
+            VoltTrace.meta(msg.getTraceName(), "process_name", "name", CoreUtils.getHostnameOrAddress());
+            VoltTrace.beginAsync(msg.getTraceName(), "recvFragment", "spi", msg.getSpHandle(),
+                                 "txnId", TxnEgo.txnIdToString(msg.getTxnId()),
+                                 "partition", Integer.toString(m_partitionId),
+                                 "hsId", CoreUtils.hsIdToString(m_mailbox.getHSId()),
+                                 "final", Boolean.toString(msg.isFinalTask()));
+        }
+
         TransactionState txn = m_outstandingTxns.get(msg.getTxnId());
         boolean logThis = false;
         // bit of a hack...we will probably not want to create and
@@ -888,6 +924,12 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
                                  m_pendingTasks, msg, null);
         }
         if (logThis) {
+            if (msg.getTraceName() != null) {
+                VoltTrace.beginAsync(msg.getTraceName(), "durability", "spi", msg.getSpHandle(),
+                                     "txnId", TxnEgo.txnIdToString(msg.getTxnId()),
+                                     "partition", Integer.toString(m_partitionId));
+            }
+
             ListenableFuture<Object> durabilityBackpressureFuture =
                     m_cl.log(msg.getInitiateTask(), msg.getSpHandle(), Ints.toArray(msg.getInvolvedPartitions()),
                              m_durabilityListener, task);
@@ -925,6 +967,19 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
         Queue<TransactionTask> pendingTasks = m_mpsPendingDurability.get(txnId);
         if (pendingTasks != null) {
             for (TransactionTask task : pendingTasks) {
+                if (task instanceof SpProcedureTask) {
+                    final Iv2InitiateTaskMessage msg = (Iv2InitiateTaskMessage) task.getTransactionState().getNotice();
+                    if (msg.getStoredProcedureInvocation().getTraceName() != null) {
+                        VoltTrace.instantAsync(msg.getStoredProcedureInvocation().getTraceName(),
+                                               "durability", "spi", msg.getSpHandle());
+                    }
+                } else if (task instanceof FragmentTask) {
+                    if (((FragmentTask) task).m_fragmentMsg.getTraceName() != null) {
+                        VoltTrace.instantAsync(((FragmentTask) task).m_fragmentMsg.getTraceName(),
+                                               "durability", "spi", ((FragmentTask) task).m_fragmentMsg.getSpHandle());
+                    }
+                }
+
                 m_pendingTasks.offer(task);
             }
             m_mpsPendingDurability.remove(txnId);
@@ -953,6 +1008,13 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
     // FragmentResponses from its replicas.
     public void handleFragmentResponseMessage(FragmentResponseMessage message)
     {
+        final TransactionState txnState = m_outstandingTxns.get(message.getTxnId());
+        if (txnState != null && ((FragmentTaskMessage) txnState.getNotice()).getTraceName() != null) {
+            VoltTrace.endAsync(((FragmentTaskMessage) txnState.getNotice()).getTraceName(),
+                                 "recvFragment", "spi", message.getSpHandle(),
+                               "status", Byte.toString(message.getStatusCode()));
+        }
+
         // Send the message to the duplicate counter, if any
         DuplicateCounter counter =
             m_duplicateCounters.get(new DuplicateCounterKey(message.getTxnId(), message.getSpHandle()));
@@ -998,6 +1060,14 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
         // now, fix that later.
         if (txn != null)
         {
+            final FragmentTaskMessage frag = (FragmentTaskMessage) txn.getNotice();
+            if (frag.getTraceName() != null) {
+                VoltTrace.instant(frag.getTraceName(), "recvCompleteTxn", "spi",
+                                  "txnId", TxnEgo.txnIdToString(msg.getTxnId()),
+                                  "partition", Integer.toString(m_partitionId),
+                                  "hsId", CoreUtils.hsIdToString(m_mailbox.getHSId()));
+            }
+
             Iv2Trace.logCompleteTransactionMessage(msg, m_mailbox.getHSId());
             final CompleteTransactionTask task =
                 new CompleteTransactionTask(txn, m_pendingTasks, msg, m_drGateway);

@@ -46,14 +46,14 @@ public class TestClientInterfaceHandleManager {
                         null,
                         AdmissionControlGroup.getDummy());
 
-        long handle = dut.getHandle(true, 7, 31337, 10, 10l, "foo", 0, false, false);
+        long handle = dut.getHandle(true, 7, 31337, 10, 10l, "foo", null, 0, false, false);
         assertEquals(7, ClientInterfaceHandleManager.getPartIdFromHandle(handle));
         assertEquals(0, ClientInterfaceHandleManager.getSeqNumFromHandle(handle));
         ClientInterfaceHandleManager.Iv2InFlight inflight = dut.findHandle(handle);
         assertEquals(handle, inflight.m_ciHandle);
         assertEquals(31337, inflight.m_clientHandle);
 
-        handle = dut.getHandle(false, 12, 31338, 10, 10l, "yankees", 0, true, false);
+        handle = dut.getHandle(false, 12, 31338, 10, 10l, "yankees", null, 0, true, false);
         assertEquals(ClientInterfaceHandleManager.MP_PART_ID,
                 ClientInterfaceHandleManager.getPartIdFromHandle(handle));
         assertEquals(0, ClientInterfaceHandleManager.getSeqNumFromHandle(handle));
@@ -75,7 +75,7 @@ public class TestClientInterfaceHandleManager {
                         AdmissionControlGroup.getDummy());
         List<Long> handles = new ArrayList<Long>();
         for (int i = 0; i < 10; i++) {
-            handles.add(dut.getHandle(true, 7, 31337 + i, 10, 10l, "yankeefoo", 0, i % 2 == 0 ? true : false, false));
+            handles.add(dut.getHandle(true, 7, 31337 + i, 10, 10l, "yankeefoo", null, 0, i % 2 == 0 ? true : false, false));
         }
         // pretend handles 0-4 were lost
         for (int i = 5; i < 10; i++) {
@@ -101,7 +101,7 @@ public class TestClientInterfaceHandleManager {
         List<Long> handles = new ArrayList<Long>();
         // Add 10 handles
         for (int i = 0; i < 10; i++) {
-            handles.add(dut.getHandle(true, 7, 31337 + i, 10, 10l, "yankeefoo", 0, i % 2 == 0 ? true : false, false));
+            handles.add(dut.getHandle(true, 7, 31337 + i, 10, 10l, "yankeefoo", null, 0, i % 2 == 0 ? true : false, false));
         }
         // remove handle 6
         ClientInterfaceHandleManager.Iv2InFlight six = dut.removeHandle(handles.get(6));

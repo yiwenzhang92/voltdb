@@ -33,6 +33,7 @@ import org.voltcore.logging.VoltLogger;
 import org.voltcore.messaging.Mailbox;
 import org.voltcore.messaging.TransactionInfoBaseMessage;
 import org.voltcore.messaging.VoltMessage;
+import org.voltcore.utils.CoreUtils;
 import org.voltdb.CatalogContext;
 import org.voltdb.CatalogSpecificPlanner;
 import org.voltdb.CommandLog;
@@ -52,6 +53,7 @@ import org.voltdb.utils.MiscUtils;
 
 import com.google_voltpatches.common.collect.Maps;
 import com.google_voltpatches.common.collect.Sets;
+import org.voltdb.utils.VoltTrace;
 
 public class MpScheduler extends Scheduler
 {
@@ -248,6 +250,12 @@ public class MpScheduler extends Scheduler
         TxnEgo ego = advanceTxnEgo();
         mpTxnId = ego.getTxnId();
 
+        if (message.getStoredProcedureInvocation().getTraceName() != null) {
+            VoltTrace.meta(message.getStoredProcedureInvocation().getTraceName(), "process_name", "name", CoreUtils.getHostnameOrAddress());
+            VoltTrace.beginAsync(message.getStoredProcedureInvocation().getTraceName(), "initMP", "mpi", mpTxnId,
+                                 "txnId", TxnEgo.txnIdToString(mpTxnId));
+        }
+
         // Don't have an SP HANDLE at the MPI, so fill in the unused value
         Iv2Trace.logIv2InitiateTaskMessage(message, m_mailbox.getHSId(), mpTxnId, Long.MIN_VALUE);
 
@@ -416,6 +424,10 @@ public class MpScheduler extends Scheduler
     // see all of these messages and control their transmission.
     public void handleInitiateResponseMessage(InitiateResponseMessage message)
     {
+        if (message.getTraceName() != null) {
+            VoltTrace.endAsync(message.getTraceName(), "initMP", "mpi", message.getTxnId());
+        }
+
         DuplicateCounter counter = m_duplicateCounters.get(message.getTxnId());
         if (counter != null) {
             int result = counter.offer(message);

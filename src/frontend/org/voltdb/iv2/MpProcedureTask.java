@@ -38,6 +38,7 @@ import org.voltdb.rejoin.TaskLog;
 import org.voltdb.utils.LogKeys;
 
 import com.google_voltpatches.common.collect.Maps;
+import org.voltdb.utils.VoltTrace;
 
 /**
  * Implements the Multi-partition procedure ProcedureTask.
@@ -102,6 +103,11 @@ public class MpProcedureTask extends ProcedureTask
     @Override
     public void run(SiteProcedureConnection siteConnection)
     {
+        if (m_msg.getStoredProcedureInvocation().getTraceName() != null) {
+            VoltTrace.beginDuration(m_msg.getStoredProcedureInvocation().getTraceName(), "MPInitTask", "mpsite",
+                                    "txnId", TxnEgo.txnIdToString(getTxnId()));
+        }
+
         hostLog.debug("STARTING: " + this);
         // Cast up. Could avoid ugliness with Iv2TransactionClass baseclass
         MpTransactionState txn = (MpTransactionState)m_txnState;
@@ -180,6 +186,10 @@ public class MpProcedureTask extends ProcedureTask
             restartTransaction();
             hostLog.debug("RESTART: " + this);
         }
+
+        if (m_msg.getStoredProcedureInvocation().getTraceName() != null) {
+            VoltTrace.endDuration(m_msg.getStoredProcedureInvocation().getTraceName());
+        }
     }
 
     @Override
@@ -198,6 +208,13 @@ public class MpProcedureTask extends ProcedureTask
     @Override
     void completeInitiateTask(SiteProcedureConnection siteConnection)
     {
+        if (m_msg.getStoredProcedureInvocation().getTraceName() != null) {
+            VoltTrace.instant(m_msg.getStoredProcedureInvocation().getTraceName(), "sendComplete", "mpsite",
+                              "txnId", TxnEgo.txnIdToString(getTxnId()),
+                              "commit", Boolean.toString(!m_txnState.needsRollback()),
+                              "dest", CoreUtils.hsIdCollectionToString(m_initiatorHSIds));
+        }
+
         CompleteTransactionMessage complete = new CompleteTransactionMessage(
                 m_initiator.getHSId(), // who is the "initiator" now??
                 m_initiator.getHSId(),

@@ -39,7 +39,8 @@ import org.voltdb.TableStreamType;
 import org.voltdb.TheHashinator.HashinatorConfig;
 import org.voltdb.VoltDB;
 import org.voltdb.VoltTable;
-import org.voltdb.VoltTrace;
+import org.voltdb.iv2.TxnEgo;
+import org.voltdb.utils.VoltTrace;
 import org.voltdb.exceptions.EEException;
 import org.voltdb.messaging.FastDeserializer;
 import org.voltdb.planner.ActivePlanRepository;
@@ -380,9 +381,11 @@ public abstract class ExecutionEngine implements FastDeserializer.Deserializatio
     {
         if (m_traceFilename != null) {
             if (isBegin) {
-                VoltTrace.bDuration(m_traceFilename, name, "ee" + m_partitionId, args);
+                VoltTrace.beginDuration(m_traceFilename, name, "ee",
+                                        "partition", Integer.toString(m_partitionId),
+                                        "info", args);
             } else {
-                VoltTrace.eDuration(m_traceFilename);
+                VoltTrace.endDuration(m_traceFilename);
             }
         }
     }
@@ -591,8 +594,19 @@ public abstract class ExecutionEngine implements FastDeserializer.Deserializatio
             m_sqlTexts = sqlTexts;
             m_traceFilename = traceFilename;
 
+            if (m_traceFilename != null) {
+                VoltTrace.beginDuration(m_traceFilename, "execPlanFragment", "spsite",
+                                        "txnId", TxnEgo.txnIdToString(txnId),
+                                        "partition", Integer.toString(m_partitionId));
+            }
+
             VoltTable[] results = coreExecutePlanFragments(numFragmentIds, planFragmentIds, inputDepIds,
                     parameterSets, txnId, spHandle, lastCommittedSpHandle, uniqueId, undoQuantumToken, m_traceFilename != null);
+
+            if (m_traceFilename != null) {
+                VoltTrace.endDuration(m_traceFilename);
+            }
+
             m_plannerStats.updateEECacheStats(m_eeCacheSize, numFragmentIds - m_cacheMisses,
                     m_cacheMisses, m_partitionId);
             return results;
