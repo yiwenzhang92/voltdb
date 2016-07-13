@@ -41,12 +41,14 @@ import java.util.regex.Pattern;
 import org.json_voltpatches.JSONArray;
 import org.json_voltpatches.JSONObject;
 import org.voltcore.logging.VoltLogger;
+import org.voltcore.utils.CoreUtils;
 import org.voltdb.ReplicationRole;
 import org.voltdb.StoredProcedureInvocation;
 import org.voltdb.VoltDB;
 import org.voltdb.VoltTable;
 import org.voltdb.client.Client;
 import org.voltdb.client.ClientResponse;
+import org.voltdb.iv2.TxnEgo;
 import org.voltdb.licensetool.LicenseApi;
 import org.voltdb.licensetool.LicenseException;
 
@@ -930,5 +932,9 @@ public class MiscUtils {
             assert this.value != null;
             return this.value;
         }
+    }
+
+    public static String hsIdTxnIdToString(long hsId, long txnId) {
+        return CoreUtils.hsIdToString(hsId) + " " + TxnEgo.txnIdToString(txnId);
     }
 }

@@ -40,6 +40,7 @@ import org.voltdb.planner.ActivePlanRepository;
 import org.voltdb.rejoin.TaskLog;
 import org.voltdb.utils.Encoder;
 import org.voltdb.utils.LogKeys;
+import org.voltdb.utils.MiscUtils;
 import org.voltdb.utils.VoltTableUtil;
 import org.voltdb.utils.VoltTrace;
 
@@ -80,7 +81,7 @@ public class FragmentTask extends TransactionTask
             VoltTrace.endAsync(m_fragmentMsg.getTraceName(),
                                "durability",
                                "spi",
-                               CoreUtils.hsIdTxnIdToString(m_initiator.getHSId(), m_fragmentMsg.getSpHandle()));
+                               MiscUtils.hsIdTxnIdToString(m_initiator.getHSId(), m_fragmentMsg.getSpHandle()));
         }
     }
 

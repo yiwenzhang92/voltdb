@@ -33,6 +33,7 @@ import org.voltdb.messaging.InitiateResponseMessage;
 import org.voltdb.messaging.Iv2InitiateTaskMessage;
 import org.voltdb.rejoin.TaskLog;
 import org.voltdb.utils.LogKeys;
+import org.voltdb.utils.MiscUtils;
 import org.voltdb.utils.VoltTrace;
 
 /**
@@ -67,7 +68,7 @@ public class SpProcedureTask extends ProcedureTask
             VoltTrace.endAsync(msg.getStoredProcedureInvocation().getTraceName(),
                                "durability",
                                "spi",
-                               CoreUtils.hsIdTxnIdToString(m_initiator.getHSId(), msg.getSpHandle()));
+                               MiscUtils.hsIdTxnIdToString(m_initiator.getHSId(), msg.getSpHandle()));
         }
     }
 
