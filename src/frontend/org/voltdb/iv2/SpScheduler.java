@@ -751,7 +751,7 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
                 m_mailbox.getHSId(), newSpHandle, true);
         if (message.getFragmentTaskMessage().getTraceName() != null) {
             VoltTrace.beginAsync(message.getFragmentTaskMessage().getTraceName(),
-                                 "recvFragment " + CoreUtils.hsIdToString(m_mailbox.getHSId()), "spi", newSpHandle,
+                                 "recvFragment", "spi", MiscUtils.hsIdTxnIdToString(m_mailbox.getHSId(), newSpHandle),
                                  "txnId", TxnEgo.txnIdToString(message.getTxnId()),
                                  "partition", Integer.toString(m_partitionId),
                                  "hsId", CoreUtils.hsIdToString(m_mailbox.getHSId()));
@@ -878,7 +878,7 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
         if (msg.getTraceName() != null) {
             VoltTrace.meta(msg.getTraceName(), "process_name", "name", CoreUtils.getHostnameOrAddress());
             VoltTrace.beginAsync(msg.getTraceName(),
-                                 "recvFragment " + CoreUtils.hsIdToString(m_mailbox.getHSId()), "spi", msg.getSpHandle(),
+                                 "recvFragment", "spi", MiscUtils.hsIdTxnIdToString(m_mailbox.getHSId(), msg.getSpHandle()),
                                  "txnId", TxnEgo.txnIdToString(msg.getTxnId()),
                                  "partition", Integer.toString(m_partitionId),
                                  "hsId", CoreUtils.hsIdToString(m_mailbox.getHSId()),
@@ -1018,7 +1018,7 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
         final TransactionState txnState = m_outstandingTxns.get(message.getTxnId());
         if (txnState != null && ((FragmentTaskMessage) txnState.getNotice()).getTraceName() != null) {
             VoltTrace.endAsync(((FragmentTaskMessage) txnState.getNotice()).getTraceName(),
-                                 "recvFragment " + CoreUtils.hsIdToString(m_mailbox.getHSId()), "spi", message.getSpHandle(),
+                                 "recvFragment", "spi", MiscUtils.hsIdTxnIdToString(m_mailbox.getHSId(), message.getSpHandle()),
                                "status", Byte.toString(message.getStatusCode()));
         }
 
