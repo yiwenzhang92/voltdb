@@ -828,7 +828,7 @@ public class SQLCommand
             }
 
             // All other commands get forwarded to @AdHoc
-            printResponse(callProcedureHelper("@AdHoc", statement));
+            printResponse(callProcedureHelper("#" + System.currentTimeMillis() + "#@AdHoc", statement));
 
         } catch (Exception exc) {
             stopOrContinue(exc);
