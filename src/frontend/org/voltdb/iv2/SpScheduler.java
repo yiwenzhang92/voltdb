@@ -577,7 +577,7 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
         if (!shortcutRead) {
             if (traceName != null) {
                 VoltTrace.beginAsync(traceName,
-                                     "durability " + CoreUtils.hsIdToString(m_mailbox.getHSId()), "spi", msg.getSpHandle(),
+                                     "durability", "spi", CoreUtils.hsIdTxnIdToString(m_mailbox.getHSId(), msg.getSpHandle()),
                                      "txnId", TxnEgo.txnIdToString(msg.getTxnId()),
                                      "partition", Integer.toString(m_partitionId));
             }
@@ -929,7 +929,7 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
         if (logThis) {
             if (msg.getTraceName() != null) {
                 VoltTrace.beginAsync(msg.getTraceName(),
-                                     "durability " + CoreUtils.hsIdToString(m_mailbox.getHSId()), "spi", msg.getSpHandle(),
+                                     "durability", "spi", CoreUtils.hsIdTxnIdToString(m_mailbox.getHSId(), msg.getSpHandle()),
                                      "txnId", TxnEgo.txnIdToString(msg.getTxnId()),
                                      "partition", Integer.toString(m_partitionId));
             }
@@ -975,12 +975,14 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
                     final Iv2InitiateTaskMessage msg = (Iv2InitiateTaskMessage) task.getTransactionState().getNotice();
                     if (msg.getStoredProcedureInvocation().getTraceName() != null) {
                         VoltTrace.instantAsync(msg.getStoredProcedureInvocation().getTraceName(),
-                                               "durability " + CoreUtils.hsIdToString(m_mailbox.getHSId()), "spi", msg.getSpHandle());
+                                               "durability", "spi",
+                                               CoreUtils.hsIdTxnIdToString(m_mailbox.getHSId(), msg.getSpHandle()));
                     }
                 } else if (task instanceof FragmentTask) {
                     if (((FragmentTask) task).m_fragmentMsg.getTraceName() != null) {
                         VoltTrace.instantAsync(((FragmentTask) task).m_fragmentMsg.getTraceName(),
-                                               "durability " + CoreUtils.hsIdToString(m_mailbox.getHSId()), "spi", ((FragmentTask) task).m_fragmentMsg.getSpHandle());
+                                               "durability", "spi",
+                                               CoreUtils.hsIdTxnIdToString(m_mailbox.getHSId(), ((FragmentTask) task).m_fragmentMsg.getSpHandle()));
                     }
                 }
 

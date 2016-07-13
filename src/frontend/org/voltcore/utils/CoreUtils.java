@@ -74,6 +74,7 @@ import com.google_voltpatches.common.util.concurrent.MoreExecutors;
 import com.google_voltpatches.common.util.concurrent.SettableFuture;
 
 import jsr166y.LinkedTransferQueue;
+import org.voltdb.iv2.TxnEgo;
 
 public class CoreUtils {
     public static final int SMALL_STACK_SIZE = 1024 * 256;
@@ -873,6 +874,10 @@ public class CoreUtils {
 
     public static int getSiteIdFromHSId(long siteId) {
         return (int)(siteId>>32);
+    }
+
+    public static String hsIdTxnIdToString(long hsId, long txnId) {
+        return hsIdToString(hsId) + " " + TxnEgo.txnIdToString(txnId);
     }
 
     public static <K,V> ImmutableMap<K, ImmutableList<V>> unmodifiableMapCopy(Map<K, List<V>> m) {

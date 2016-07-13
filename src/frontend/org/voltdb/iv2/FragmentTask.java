@@ -78,9 +78,9 @@ public class FragmentTask extends TransactionTask
     protected void durabilityTraceEnd() {
         if (m_fragmentMsg.getTraceName() != null) {
             VoltTrace.endAsync(m_fragmentMsg.getTraceName(),
-                               "durability " + CoreUtils.hsIdToString(m_initiator.getHSId()),
+                               "durability",
                                "spi",
-                               m_fragmentMsg.getSpHandle());
+                               CoreUtils.hsIdTxnIdToString(m_initiator.getHSId(), m_fragmentMsg.getSpHandle()));
         }
     }
 

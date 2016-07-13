@@ -65,9 +65,9 @@ public class SpProcedureTask extends ProcedureTask
         final Iv2InitiateTaskMessage msg = (Iv2InitiateTaskMessage) getTransactionState().getNotice();
         if (msg.getStoredProcedureInvocation().getTraceName() != null) {
             VoltTrace.endAsync(msg.getStoredProcedureInvocation().getTraceName(),
-                               "durability " + CoreUtils.hsIdToString(m_initiator.getHSId()),
+                               "durability",
                                "spi",
-                               msg.getSpHandle());
+                               CoreUtils.hsIdTxnIdToString(m_initiator.getHSId(), msg.getSpHandle()));
         }
     }
 
