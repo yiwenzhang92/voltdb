@@ -23,6 +23,9 @@ import org.voltcore.logging.VoltLogger;
 import org.voltdb.CommandLog;
 import org.voltdb.CommandLog.DurabilityListener;
 import org.voltdb.iv2.SpScheduler.DurableUniqueIdListener;
+import org.voltdb.messaging.Iv2InitiateTaskMessage;
+import org.voltdb.utils.MiscUtils;
+import org.voltdb.utils.VoltTrace;
 
 /**
  * This class is not thread-safe. Most of its usage is on the Site thread.
@@ -143,6 +146,23 @@ public class SpDurabilityListener implements DurabilityListener {
         private void queuePendingTasks() {
             // Notify all sync transactions and the SP UniqueId listeners
             for (TransactionTask o : m_pendingTransactions) {
+                if (o instanceof SpProcedureTask) {
+                    final Iv2InitiateTaskMessage msg = (Iv2InitiateTaskMessage) o.getTransactionState().getNotice();
+                    if (msg.getStoredProcedureInvocation().getTraceName() != null) {
+                        VoltTrace.endAsync(msg.getStoredProcedureInvocation().getTraceName(),
+                                           "durability", "spi",
+                                           MiscUtils.hsIdTxnIdToString(m_spScheduler.m_mailbox.getHSId(),
+                                                                       msg.getSpHandle()));
+                    }
+                } else if (o instanceof FragmentTask) {
+                    if (((FragmentTask) o).m_fragmentMsg.getTraceName() != null) {
+                        VoltTrace.endAsync(((FragmentTask) o).m_fragmentMsg.getTraceName(),
+                                           "durability", "spi",
+                                           MiscUtils.hsIdTxnIdToString(m_spScheduler.m_mailbox.getHSId(),
+                                                                       ((FragmentTask) o).m_fragmentMsg.getSpHandle()));
+                    }
+                }
+
                 m_pendingTasks.offer(o);
                 // Make sure all queued tasks for this MP txn are released
                 if (!o.getTransactionState().isSinglePartition()) {
