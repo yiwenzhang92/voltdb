@@ -989,15 +989,15 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
                 if (task instanceof SpProcedureTask) {
                     final Iv2InitiateTaskMessage msg = (Iv2InitiateTaskMessage) task.getTransactionState().getNotice();
                     if (msg.getStoredProcedureInvocation().getTraceName() != null) {
-                        VoltTrace.instantAsync(msg.getStoredProcedureInvocation().getTraceName(),
-                                               "durability", "spi",
-                                               MiscUtils.hsIdTxnIdToString(m_mailbox.getHSId(), msg.getSpHandle()));
+                        VoltTrace.endAsync(msg.getStoredProcedureInvocation().getTraceName(),
+                                           "durability", "spi",
+                                           MiscUtils.hsIdTxnIdToString(m_mailbox.getHSId(), msg.getSpHandle()));
                     }
                 } else if (task instanceof FragmentTask) {
                     if (((FragmentTask) task).m_fragmentMsg.getTraceName() != null) {
-                        VoltTrace.instantAsync(((FragmentTask) task).m_fragmentMsg.getTraceName(),
-                                               "durability", "spi",
-                                               MiscUtils.hsIdTxnIdToString(m_mailbox.getHSId(), ((FragmentTask) task).m_fragmentMsg.getSpHandle()));
+                        VoltTrace.endAsync(((FragmentTask) task).m_fragmentMsg.getTraceName(),
+                                           "durability", "spi",
+                                           MiscUtils.hsIdTxnIdToString(m_mailbox.getHSId(), ((FragmentTask) task).m_fragmentMsg.getSpHandle()));
                     }
                 }
 
