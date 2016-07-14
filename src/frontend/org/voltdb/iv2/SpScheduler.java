@@ -746,7 +746,7 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
                     traceName = "replicateSP";
                 }
                 VoltTrace.endAsync(counter.getInvocation().getTraceName(), traceName, "spi", traceId,
-                                   "hash", message.getClientResponseData().getHash().toString());
+                                   "hash", String.valueOf(message.getClientResponseData().getHash()));
             }
 
             int result = counter.offer(message);
