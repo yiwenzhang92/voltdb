@@ -252,6 +252,7 @@ public class MpScheduler extends Scheduler
 
         if (message.getStoredProcedureInvocation().getTraceName() != null) {
             VoltTrace.meta(message.getStoredProcedureInvocation().getTraceName(), "process_name", "name", CoreUtils.getHostnameOrAddress());
+            VoltTrace.meta(message.getStoredProcedureInvocation().getTraceName(), "thread_name", "name", Thread.currentThread().getName());
             VoltTrace.beginAsync(message.getStoredProcedureInvocation().getTraceName(), "initMP", "mpi", mpTxnId,
                                  "txnId", TxnEgo.txnIdToString(mpTxnId));
         }

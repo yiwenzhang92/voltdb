@@ -268,6 +268,7 @@ public final class InvocationDispatcher {
 
         if (task.getTraceName() != null) {
             VoltTrace.meta(task.getTraceName(), "process_name", "name", CoreUtils.getHostnameOrAddress());
+            VoltTrace.meta(task.getTraceName(), "thread_name", "name", Thread.currentThread().getName());
             VoltTrace.beginAsync(task.getTraceName(), "recvTxn", "ci", task.getClientHandle());
         }
 
