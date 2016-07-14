@@ -1021,9 +1021,7 @@ public class VoltDB {
                 }
 
                 // Flush trace files
-                if (VoltTrace.hasEvents()) {
-                    VoltTrace.closeAllAndShutdown(TimeUnit.SECONDS.toMillis(10));
-                }
+                VoltTrace.closeAllAndShutdown(TimeUnit.SECONDS.toMillis(10));
 
                 // Even if the logger is null, don't stop.  We want to log the stack trace and
                 // any other pertinent information to a .dmp file for crash diagnosis
