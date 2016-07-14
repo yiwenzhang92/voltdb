@@ -426,9 +426,6 @@ public class MpScheduler extends Scheduler
     {
         if (message.getTraceName() != null) {
             VoltTrace.endAsync(message.getTraceName(), "initMP", "mpi", message.getTxnId());
-            if (CoreUtils.getHostIdFromHSId(message.getInitiatorHSId()) != CoreUtils.getHostIdFromHSId(m_mailbox.getHSId())) {
-                VoltTrace.close(message.getTraceName());
-            }
         }
 
         DuplicateCounter counter = m_duplicateCounters.get(message.getTxnId());

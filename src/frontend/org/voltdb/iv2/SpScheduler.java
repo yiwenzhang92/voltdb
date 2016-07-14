@@ -728,9 +728,6 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
         if (shortcutRead) {
             if (message.getTraceName() != null) {
                 VoltTrace.endAsync(message.getTraceName(), "initSP", "spi", traceId);
-                if (CoreUtils.getHostIdFromHSId(message.getInitiatorHSId()) != CoreUtils.getHostIdFromHSId(m_mailbox.getHSId())) {
-                    VoltTrace.close(message.getTraceName());
-                }
             }
             // the initiatorHSId is the ClientInterface mailbox. Yeah. I know.
             m_mailbox.send(message.getInitiatorHSId(), message);
@@ -751,12 +748,6 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
 
             int result = counter.offer(message);
             if (result == DuplicateCounter.DONE) {
-                if (message.getTraceName() != null) {
-                    if (CoreUtils.getHostIdFromHSId(counter.m_destinationId) != CoreUtils.getHostIdFromHSId(m_mailbox.getHSId())) {
-                        VoltTrace.close(message.getTraceName());
-                    }
-                }
-
                 m_duplicateCounters.remove(dcKey);
                 m_repairLogTruncationHandle = spHandle;
                 m_mailbox.send(counter.m_destinationId, counter.getLastResponse());
@@ -768,9 +759,6 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
         else {
             if (message.getTraceName() != null) {
                 VoltTrace.endAsync(message.getTraceName(), "initSP", "spi", traceId);
-                if (CoreUtils.getHostIdFromHSId(message.getInitiatorHSId()) != CoreUtils.getHostIdFromHSId(m_mailbox.getHSId())) {
-                    VoltTrace.close(message.getTraceName());
-                }
             }
             // the initiatorHSId is the ClientInterface mailbox. Yeah. I know.
             m_repairLogTruncationHandle = spHandle;
