@@ -571,6 +571,7 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
         if (traceName != null) {
             VoltTrace.meta(traceName, "process_name", "name", CoreUtils.getHostnameOrAddress());
             VoltTrace.meta(traceName, "thread_name", "name", Thread.currentThread().getName());
+            VoltTrace.meta(traceName, "thread_sort_index", "sort_index", Integer.toString(10000));
             VoltTrace.beginAsync(traceName, "initSP", "spi",
                                  MiscUtils.hsIdPairTxnIdToString(m_mailbox.getHSId(), m_mailbox.getHSId(), msg.getSpHandle()),
                                  "txnId", TxnEgo.txnIdToString(msg.getTxnId()),
@@ -917,6 +918,7 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
         if (msg.getTraceName() != null) {
             VoltTrace.meta(msg.getTraceName(), "process_name", "name", CoreUtils.getHostnameOrAddress());
             VoltTrace.meta(msg.getTraceName(), "thread_name", "name", Thread.currentThread().getName());
+            VoltTrace.meta(msg.getTraceName(), "thread_sort_index", "sort_index", Integer.toString(10000));
             VoltTrace.beginAsync(msg.getTraceName(),
                                  "recvFragment", "spi",
                                  MiscUtils.hsIdPairTxnIdToString(m_mailbox.getHSId(), m_mailbox.getHSId(), msg.getSpHandle()),
