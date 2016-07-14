@@ -16,13 +16,19 @@
  */
 package org.voltdb.utils;
 
+import java.io.IOException;
+import java.text.DecimalFormat;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.LinkedBlockingQueue;
 
+import org.codehaus.jackson.JsonGenerator;
+import org.codehaus.jackson.JsonProcessingException;
 import org.codehaus.jackson.annotate.JsonIgnore;
 import org.codehaus.jackson.annotate.JsonProperty;
+import org.codehaus.jackson.map.JsonSerializer;
 import org.codehaus.jackson.map.ObjectMapper;
+import org.codehaus.jackson.map.SerializerProvider;
 import org.codehaus.jackson.map.annotate.JsonSerialize;
 import org.voltcore.utils.CoreUtils;
 
@@ -90,7 +96,7 @@ public class VoltTrace {
         private String m_id;
         private long m_tid;
         private long m_nanos;
-        private long m_ts;
+        private double m_ts;
         private String[] m_argsArr;
         private Map<String, String> m_args;
 
@@ -111,7 +117,7 @@ public class VoltTrace {
             m_id = asyncId;
             m_argsArr = args;
             m_tid = Thread.currentThread().getId();
-            m_nanos = System.nanoTime()/1000;
+            m_nanos = System.nanoTime();
         }
 
         private void mapFromArgArray() {
@@ -127,7 +133,7 @@ public class VoltTrace {
         }
 
         public void setSyncNanos(long syncNanos) {
-            m_ts = m_nanos - syncNanos;
+            m_ts = (m_nanos - syncNanos)/1000.0;
         }
 
         @JsonIgnore
@@ -200,7 +206,8 @@ public class VoltTrace {
             return m_nanos;
         }
 
-        public long getTs() {
+        @JsonSerialize(using = CustomDoubleSerializer.class)
+        public double getTs() {
             return m_ts;
         }
 
@@ -217,6 +224,21 @@ public class VoltTrace {
 
         public void setArgs(Map<String, String> args) {
             m_args = args;
+        }
+    }
+
+    private static class CustomDoubleSerializer extends JsonSerializer<Double> {
+
+        private DecimalFormat m_format = new DecimalFormat("#0.00");
+
+        @Override
+        public void serialize(Double value, JsonGenerator jsonGen, SerializerProvider sp)
+                throws IOException, JsonProcessingException {
+            if (value == null) {
+                jsonGen.writeNull();
+            } else {
+                jsonGen.writeNumber(m_format.format(value));
+            }
         }
     }
 

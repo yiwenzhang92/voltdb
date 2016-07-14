@@ -28,6 +28,7 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Random;
@@ -42,32 +43,44 @@ import junit.framework.TestCase;
 public class TestVoltTrace extends TestCase {
 
     private static final String FILE_NAME_PREFIX = "tracetest";
-    private static final int FILE_COUNT = 3;
 
     private ObjectMapper m_mapper = new ObjectMapper();
 
     @Override
-    protected void setUp() throws Exception {
-        for (int i=0; i<FILE_COUNT; i++) {
-            File file = new File(FILE_NAME_PREFIX + i);
-            if (file.exists()) {
-                if (!file.delete()) {
-                    throw new RuntimeException("Failed to delete file " + file);
+    public void setUp() throws Exception {
+        cleanupTraceFiles();
+    }
+
+    @Override
+    public void tearDown() throws Exception {
+        cleanupTraceFiles();
+    }
+
+    private void cleanupTraceFiles() {
+        File[] files = new File(".").listFiles();
+        for (int i=0; i<files.length; i++) {
+            if (files[i].getName().startsWith(FILE_NAME_PREFIX) && !files[i].isFile()) {
+                throw new RuntimeException("Invalid trace file");
+            }
+            if (files[i].getName().startsWith(FILE_NAME_PREFIX)) {
+                if (!files[i].delete()) {
+                    throw new RuntimeException("Failed to delete file " + files[i]);
                 }
             }
         }
     }
 
     public void testVoltTrace() throws Exception {
-        ExecutorService es = Executors.newFixedThreadPool(FILE_COUNT);
-        SenderRunnable[] senders = new SenderRunnable[FILE_COUNT];
-        for (int i=0; i<FILE_COUNT; i++) {
+        int fileCount = 3;
+        ExecutorService es = Executors.newFixedThreadPool(fileCount);
+        SenderRunnable[] senders = new SenderRunnable[fileCount];
+        for (int i=0; i<fileCount; i++) {
             senders[i] = new SenderRunnable(FILE_NAME_PREFIX + i);
             es.submit(senders[i]);
         }
         es.shutdown();
         es.awaitTermination(60, TimeUnit.SECONDS);
-        for (int i=0; i<FILE_COUNT; i++) {
+        for (int i=0; i<fileCount; i++) {
             VoltTrace.close(FILE_NAME_PREFIX + i);
         }
 
@@ -75,9 +88,89 @@ public class TestVoltTrace extends TestCase {
             Thread.sleep(250);
         }
 
-        for (int i=0; i<FILE_COUNT; i++) {
+        for (int i=0; i<fileCount; i++) {
             verifyFileContents(senders[i].getSentList(), FILE_NAME_PREFIX+i);
         }
+    }
+
+    public void testTraceLimit() throws Exception {
+        TraceFileWriter.PURGE_MILLIS_DELAY = 30000;
+        int maxFiles = TraceFileWriter.MAX_OPEN_TRACES;
+        for (int i=0; i<maxFiles; i++) {
+            VoltTrace.meta(FILE_NAME_PREFIX+i, "name"+i);
+        }
+
+        while (VoltTrace.hasEvents()) {
+            Thread.sleep(250);
+        }
+        int count = countTraceFiles();
+        assertEquals(maxFiles, count);
+
+        // One more should not increase the count
+        VoltTrace.meta(FILE_NAME_PREFIX+maxFiles, "name"+maxFiles);
+        while (VoltTrace.hasEvents()) {
+            Thread.sleep(250);
+        }
+        count = countTraceFiles();
+        assertEquals(maxFiles, count);
+        assertFalse(hasTraceFile(FILE_NAME_PREFIX+maxFiles));
+
+        // Closing one should allow one more trace
+        VoltTrace.close(FILE_NAME_PREFIX+"0");
+        VoltTrace.meta(FILE_NAME_PREFIX+maxFiles, "name"+maxFiles);
+        while (VoltTrace.hasEvents()) {
+            Thread.sleep(250);
+        }
+        count = countTraceFiles();
+        assertEquals(maxFiles+1, count);
+        assertTrue(hasTraceFile(FILE_NAME_PREFIX+maxFiles));
+
+        // cleanup
+        for (int i=0; i<=maxFiles; i++) {
+            VoltTrace.close(FILE_NAME_PREFIX+i);
+        }
+    }
+
+    public void testTracePurge() throws Exception {
+        TraceFileWriter.PURGE_MILLIS_DELAY = 1000;
+        int maxFiles = TraceFileWriter.MAX_OPEN_TRACES;
+        long startTime = System.currentTimeMillis();
+        for (int i=0; i<maxFiles; i++) {
+            VoltTrace.meta(FILE_NAME_PREFIX+i, "name"+i);
+        }
+
+        // wait till purge time is up
+        while ((System.currentTimeMillis()-startTime) < 1000) {
+            Thread.sleep(500);
+        }
+        VoltTrace.meta(FILE_NAME_PREFIX+maxFiles, "name"+maxFiles);
+        while (VoltTrace.hasEvents()) {
+            Thread.sleep(250);
+        }
+        int count = countTraceFiles();
+        assertEquals(maxFiles+1, count);
+        assertTrue(hasTraceFile(FILE_NAME_PREFIX+maxFiles));
+
+        // cleanup
+        for (int i=0; i<=maxFiles; i++) {
+            VoltTrace.close(FILE_NAME_PREFIX+i);
+        }
+    }
+
+    private boolean hasTraceFile(String fileName) {
+        return Arrays.asList(new File(".").list()).contains(fileName);
+    }
+
+    private int countTraceFiles() {
+        File[] files = new File(".").listFiles();
+        int count = 0;
+        for (int i=0; i<files.length; i++) {
+            if (files[i].getName().startsWith(FILE_NAME_PREFIX)) {
+                count++;
+            }
+        }
+
+        return count;
     }
 
     private ArrayList<VoltTrace.TraceEventType> m_allEventTypes = new ArrayList<>(EnumSet.allOf(VoltTrace.TraceEventType.class));
@@ -136,10 +229,10 @@ public class TestVoltTrace extends TestCase {
     private VoltTrace.TraceEvent randomInstant(String fileName, boolean async) {
         VoltTrace.TraceEventType type = (async) ?
                 VoltTrace.TraceEventType.ASYNC_INSTANT : VoltTrace.TraceEventType.INSTANT;
-        Long id = (async) ? m_random.nextLong() : null;
+        String id = (async) ? Long.toString(m_random.nextLong()) : null;
         return new VoltTrace.TraceEvent(fileName, type,
                 "name"+m_random.nextInt(5), "cat"+m_random.nextInt(5),
-                Long.toString(id), randomArgs());
+                id, randomArgs());
     }
 
     private static String[] s_metadataNames = { "process_name", "process_labels", "process_sort_index",
@@ -243,7 +336,6 @@ public class TestVoltTrace extends TestCase {
                         throw new IllegalArgumentException("Unsupported event type: " + event.getType());
                     }
                     m_sentList.add(event);
-                    Thread.sleep(0, 1000);
                 }
             } catch(Throwable t) {
                 t.printStackTrace();

@@ -21,7 +21,9 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Map.Entry;
 
 import org.codehaus.jackson.map.ObjectMapper;
 
@@ -30,13 +32,16 @@ import org.codehaus.jackson.map.ObjectMapper;
  *TODO:
  */
 public class TraceFileWriter implements Runnable {
-    private static final int MAX_OPEN_TRACES = 16;
+    public static final String PURGE_SECONDS_DELAY_PROP = "TRACE_PURGE_DELAY_SECONDS";
+    public static final int PURGE_SECONDS_DELAY = Integer.getInteger(PURGE_SECONDS_DELAY_PROP, 30);
+    static long PURGE_MILLIS_DELAY = PURGE_SECONDS_DELAY*1000;
+    public static final int MAX_OPEN_TRACES = 16;
 
     private final ObjectMapper m_jsonMapper = new ObjectMapper();
     private final VoltTrace m_voltTrace;
     private boolean m_shutdown;
-    private Map<String, BufferedWriter> m_fileWriters = new HashMap<>();
-    private Map<String, Long> m_syncNanos = new HashMap<>();
+    private Map<String, BufferedWriter> m_fileWriters = new LinkedHashMap<>(16, 0.75F, true);
+    private Map<String, FileTimeInfo> m_fileTimeInfo = new HashMap<>();
 
     public TraceFileWriter(VoltTrace voltTrace) {
         m_voltTrace = voltTrace;
@@ -48,7 +53,7 @@ public class TraceFileWriter implements Runnable {
                 VoltTrace.TraceEvent event = m_voltTrace.takeEvent();
                 boolean firstRow = false;
                 if (event.getType()==VoltTrace.TraceEventType.VOLT_INTERNAL_CLOSE) {
-                    handleCloseEvent(event);
+                    handleCloseEvent(event.getFileName());
                 } else {
                     if (m_fileWriters.get(event.getFileName()) == null) {
                         firstRow = true;
@@ -57,7 +62,8 @@ public class TraceFileWriter implements Runnable {
                 }
                 BufferedWriter bw = m_fileWriters.get(event.getFileName());
                 if (bw != null) {
-                    event.setSyncNanos(m_syncNanos.get(event.getFileName()));
+                    m_fileTimeInfo.get(event.getFileName()).updateAccessMillis();
+                    event.setSyncNanos(m_fileTimeInfo.get(event.getFileName()).m_syncNanos);
                     String json = m_jsonMapper.writeValueAsString(event);
                     if (!firstRow) bw.write(",");
                     bw.newLine();
@@ -77,8 +83,8 @@ public class TraceFileWriter implements Runnable {
         }
     }
 
-    private void handleCloseEvent(VoltTrace.TraceEvent event) {
-        BufferedWriter bw = m_fileWriters.get(event.getFileName());
+    private void handleCloseEvent(String fileName) {
+        BufferedWriter bw = m_fileWriters.get(fileName);
         if (bw==null) return;
 
         try {
@@ -90,8 +96,8 @@ public class TraceFileWriter implements Runnable {
         } catch(IOException e) {
             //TODO: Debug log
         }
-        m_fileWriters.remove(event.getFileName());
-        m_syncNanos.remove(event.getFileName());
+        m_fileWriters.remove(fileName);
+        m_fileTimeInfo.remove(fileName);
     }
 
     private void startTraceFile(VoltTrace.TraceEvent event) {
@@ -105,9 +111,17 @@ public class TraceFileWriter implements Runnable {
             return;
         }
 
-        if (m_fileWriters.size() >= MAX_OPEN_TRACES) {
-            //TODO: log
-            return;
+        if (m_fileWriters.size() == MAX_OPEN_TRACES) {
+            // Check if the earliest accessed file can be removed
+            Entry<String, BufferedWriter> entry = m_fileWriters.entrySet().iterator().next();
+            String key = entry.getKey();
+            if ((System.currentTimeMillis() - m_fileTimeInfo.get(key).m_accessMillis)
+                    > PURGE_MILLIS_DELAY) {
+                handleCloseEvent(key);
+            } else { // no entries to remove. Don't allow this trace
+                //TODO: rate limited log
+                return;
+            }
         }
 
         try {
@@ -115,11 +129,25 @@ public class TraceFileWriter implements Runnable {
             // Uses the default platform encoding for now.
             bw = new BufferedWriter(new FileWriter(event.getFileName()));
             m_fileWriters.put(event.getFileName(), bw);
-            m_syncNanos.put(event.getFileName(), event.getNanos());
+            m_fileTimeInfo.put(event.getFileName(), new FileTimeInfo(event.getNanos()));
             bw.write("[");
             bw.flush();
         } catch(IOException e) {
             //TODO: rate limited log
+        }
+    }
+
+    private static class FileTimeInfo {
+        final long m_syncNanos;
+        long m_accessMillis;
+
+        public FileTimeInfo(long syncNanos) {
+            m_syncNanos = syncNanos;
+            m_accessMillis = System.currentTimeMillis();
+        }
+
+        public void updateAccessMillis() {
+            m_accessMillis = System.currentTimeMillis();
         }
     }
 }
