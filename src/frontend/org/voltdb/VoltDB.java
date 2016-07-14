@@ -35,6 +35,7 @@ import java.util.NavigableSet;
 import java.util.Queue;
 import java.util.TimeZone;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 import org.voltcore.logging.VoltLog4jLogger;
 import org.voltcore.logging.VoltLogger;
@@ -55,6 +56,7 @@ import org.voltdb.utils.VoltFile;
 
 import com.google_voltpatches.common.collect.ImmutableSortedSet;
 import com.google_voltpatches.common.net.HostAndPort;
+import org.voltdb.utils.VoltTrace;
 
 /**
  * VoltDB provides main() for the VoltDB server
@@ -1016,6 +1018,11 @@ public class VoltDB {
                 // we don't expect this to ever fail, but if it does, skip to dying immediately
                 if (!turnOffClientInterface()) {
                     return; // this will jump to the finally block and die faster
+                }
+
+                // Flush trace files
+                if (VoltTrace.hasEvents()) {
+                    VoltTrace.closeAllAndShutdown(TimeUnit.SECONDS.toMillis(10));
                 }
 
                 // Even if the logger is null, don't stop.  We want to log the stack trace and
