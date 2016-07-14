@@ -937,4 +937,9 @@ public class MiscUtils {
     public static String hsIdTxnIdToString(long hsId, long txnId) {
         return CoreUtils.hsIdToString(hsId) + " " + TxnEgo.txnIdToString(txnId);
     }
+
+    public static String hsIdPairTxnIdToString(long srcHsId, long destHsId, long txnId) {
+        return CoreUtils.hsIdToString(srcHsId) + "->" + CoreUtils.hsIdToString(destHsId) +
+               " " + TxnEgo.txnIdToString(txnId);
+    }
 }

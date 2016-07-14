@@ -509,6 +509,16 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
             //Don't replicate reads, this really assumes that DML validation
             //is going to be integrated soonish
             if (m_isLeader && (!shortcutRead) && (m_sendToHSIds.length > 0)) {
+                final String traceName = msg.getStoredProcedureInvocation().getTraceName();
+                if (traceName != null) {
+                    for (long hsId : m_sendToHSIds) {
+                        VoltTrace.beginAsync(traceName, "replicateSP", "spi",
+                                             MiscUtils.hsIdPairTxnIdToString(m_mailbox.getHSId(), hsId, msg.getSpHandle()),
+                                             "txnId", TxnEgo.txnIdToString(msg.getTxnId()),
+                                             "dest", CoreUtils.hsIdToString(hsId));
+                    }
+                }
+
                 Iv2InitiateTaskMessage replmsg =
                     new Iv2InitiateTaskMessage(m_mailbox.getHSId(),
                             m_mailbox.getHSId(),
@@ -560,7 +570,8 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
         final String traceName = msg.getStoredProcedureInvocation().getTraceName();
         if (traceName != null) {
             VoltTrace.meta(traceName, "process_name", "name", CoreUtils.getHostnameOrAddress());
-            VoltTrace.beginAsync(traceName, "initSP", "spi", msg.getTxnId(),
+            VoltTrace.beginAsync(traceName, "initSP", "spi",
+                                 MiscUtils.hsIdPairTxnIdToString(m_mailbox.getHSId(), m_mailbox.getHSId(), msg.getSpHandle()),
                                  "txnId", TxnEgo.txnIdToString(msg.getTxnId()),
                                  "partition", Integer.toString(m_partitionId),
                                  "hsId", CoreUtils.hsIdToString(m_mailbox.getHSId()));
@@ -704,13 +715,19 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
          * possible to read an unconfirmed transaction's writes that will be lost.
          */
         boolean shortcutRead = message.isReadOnly() && (m_defaultConsistencyReadLevel == ReadLevel.FAST);
+        final String traceId;
+        if (message.getTraceName() != null) {
+            traceId = MiscUtils.hsIdPairTxnIdToString(m_mailbox.getHSId(), message.m_sourceHSId, message.getSpHandle());
+        } else {
+            traceId = null;
+        }
 
         // All short-circuit reads will have no duplicate counter.
         // Avoid all the lookup below.
         // Also, don't update the truncation handle, since it won't have meaning for anyone.
         if (shortcutRead) {
             if (message.getTraceName() != null) {
-                VoltTrace.endAsync(message.getTraceName(), "initSP", "spi", message.getTxnId());
+                VoltTrace.endAsync(message.getTraceName(), "initSP", "spi", traceId);
                 if (CoreUtils.getHostIdFromHSId(message.getInitiatorHSId()) != CoreUtils.getHostIdFromHSId(m_mailbox.getHSId())) {
                     VoltTrace.close(message.getTraceName());
                 }
@@ -724,14 +741,22 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
         final DuplicateCounterKey dcKey = new DuplicateCounterKey(message.getTxnId(), spHandle);
         DuplicateCounter counter = m_duplicateCounters.get(dcKey);
         if (counter != null) {
+            if (message.getTraceName() != null) {
+                String traceName = "initSP";
+                if (message.m_sourceHSId != m_mailbox.getHSId()) {
+                    traceName = "replicateSP";
+                }
+                VoltTrace.endAsync(message.getTraceName(), traceName, "spi", traceId);
+            }
+
             int result = counter.offer(message);
             if (result == DuplicateCounter.DONE) {
                 if (message.getTraceName() != null) {
-                    VoltTrace.endAsync(message.getTraceName(), "initSP", "spi", message.getTxnId());
                     if (CoreUtils.getHostIdFromHSId(counter.m_destinationId) != CoreUtils.getHostIdFromHSId(m_mailbox.getHSId())) {
                         VoltTrace.close(message.getTraceName());
                     }
                 }
+
                 m_duplicateCounters.remove(dcKey);
                 m_repairLogTruncationHandle = spHandle;
                 m_mailbox.send(counter.m_destinationId, counter.getLastResponse());
@@ -742,7 +767,7 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
         }
         else {
             if (message.getTraceName() != null) {
-                VoltTrace.endAsync(message.getTraceName(), "initSP", "spi", message.getTxnId());
+                VoltTrace.endAsync(message.getTraceName(), "initSP", "spi", traceId);
                 if (CoreUtils.getHostIdFromHSId(message.getInitiatorHSId()) != CoreUtils.getHostIdFromHSId(m_mailbox.getHSId())) {
                     VoltTrace.close(message.getTraceName());
                 }
@@ -765,7 +790,8 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
                 m_mailbox.getHSId(), newSpHandle, true);
         if (message.getFragmentTaskMessage().getTraceName() != null) {
             VoltTrace.beginAsync(message.getFragmentTaskMessage().getTraceName(),
-                                 "recvFragment", "spi", MiscUtils.hsIdTxnIdToString(m_mailbox.getHSId(), newSpHandle),
+                                 "recvFragment", "spi",
+                                 MiscUtils.hsIdPairTxnIdToString(m_mailbox.getHSId(), m_mailbox.getHSId(), newSpHandle),
                                  "txnId", TxnEgo.txnIdToString(message.getTxnId()),
                                  "partition", Integer.toString(m_partitionId),
                                  "hsId", CoreUtils.hsIdToString(m_mailbox.getHSId()));
@@ -844,6 +870,16 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
              * In that case don't propagate it to avoid a determinism check and extra messaging overhead
              */
             if (m_sendToHSIds.length > 0 && (!shortcutRead || msg.isSysProcTask())) {
+                if (msg.getTraceName() != null) {
+                    for (long hsId : m_sendToHSIds) {
+                        VoltTrace.beginAsync(msg.getTraceName(),
+                                             "replicateFragment", "spi",
+                                             MiscUtils.hsIdPairTxnIdToString(m_mailbox.getHSId(), hsId, msg.getSpHandle()),
+                                             "txnId", TxnEgo.txnIdToString(msg.getTxnId()),
+                                             "dest", CoreUtils.hsIdToString(hsId));
+                    }
+                }
+
                 FragmentTaskMessage replmsg =
                     new FragmentTaskMessage(m_mailbox.getHSId(),
                             m_mailbox.getHSId(), msg);
@@ -892,7 +928,8 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
         if (msg.getTraceName() != null) {
             VoltTrace.meta(msg.getTraceName(), "process_name", "name", CoreUtils.getHostnameOrAddress());
             VoltTrace.beginAsync(msg.getTraceName(),
-                                 "recvFragment", "spi", MiscUtils.hsIdTxnIdToString(m_mailbox.getHSId(), msg.getSpHandle()),
+                                 "recvFragment", "spi",
+                                 MiscUtils.hsIdPairTxnIdToString(m_mailbox.getHSId(), m_mailbox.getHSId(), msg.getSpHandle()),
                                  "txnId", TxnEgo.txnIdToString(msg.getTxnId()),
                                  "partition", Integer.toString(m_partitionId),
                                  "hsId", CoreUtils.hsIdToString(m_mailbox.getHSId()),
@@ -1030,11 +1067,27 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
     public void handleFragmentResponseMessage(FragmentResponseMessage message)
     {
         final TransactionState txnState = m_outstandingTxns.get(message.getTxnId());
+        final String traceId;
+        if (txnState != null && ((FragmentTaskMessage) txnState.getNotice()).getTraceName() != null) {
+            traceId = MiscUtils.hsIdPairTxnIdToString(m_mailbox.getHSId(), message.m_sourceHSId, message.getSpHandle());
+        } else {
+            traceId = null;
+        }
 
         // Send the message to the duplicate counter, if any
         DuplicateCounter counter =
             m_duplicateCounters.get(new DuplicateCounterKey(message.getTxnId(), message.getSpHandle()));
         if (counter != null) {
+            if (txnState != null && ((FragmentTaskMessage) txnState.getNotice()).getTraceName() != null) {
+                String traceName = "recvFragment";
+                if (message.m_sourceHSId != m_mailbox.getHSId()) {
+                    traceName = "replicateFragment";
+                }
+                VoltTrace.endAsync(((FragmentTaskMessage) txnState.getNotice()).getTraceName(),
+                                   traceName, "spi", traceId,
+                                   "status", Byte.toString(message.getStatusCode()));
+            }
+
             int result = counter.offer(message);
             if (result == DuplicateCounter.DONE) {
                 m_duplicateCounters.remove(new DuplicateCounterKey(message.getTxnId(), message.getSpHandle()));
@@ -1043,13 +1096,6 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
                 // MPI is tracking deps per partition HSID.  We need to make
                 // sure we write ours into the message getting sent to the MPI
                 resp.setExecutorSiteId(m_mailbox.getHSId());
-
-                if (txnState != null && ((FragmentTaskMessage) txnState.getNotice()).getTraceName() != null) {
-                    VoltTrace.endAsync(((FragmentTaskMessage) txnState.getNotice()).getTraceName(),
-                                       "recvFragment", "spi", MiscUtils.hsIdTxnIdToString(m_mailbox.getHSId(), message.getSpHandle()),
-                                       "status", Byte.toString(resp.getStatusCode()));
-                }
-
                 m_mailbox.send(counter.m_destinationId, resp);
             }
             else if (result == DuplicateCounter.MISMATCH) {
@@ -1061,7 +1107,7 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
 
         if (txnState != null && ((FragmentTaskMessage) txnState.getNotice()).getTraceName() != null) {
             VoltTrace.endAsync(((FragmentTaskMessage) txnState.getNotice()).getTraceName(),
-                               "recvFragment", "spi", MiscUtils.hsIdTxnIdToString(m_mailbox.getHSId(), message.getSpHandle()),
+                               "recvFragment", "spi", traceId,
                                "status", Byte.toString(message.getStatusCode()));
         }
 
