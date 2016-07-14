@@ -43,6 +43,7 @@ import org.voltdb.messaging.DumpMessage;
 import org.voltdb.messaging.FragmentResponseMessage;
 import org.voltdb.messaging.FragmentTaskMessage;
 import org.voltdb.messaging.Iv2InitiateTaskMessage;
+import org.voltdb.utils.MiscUtils;
 import org.voltdb.utils.VoltTableUtil;
 
 import com.google_voltpatches.common.base.Preconditions;
@@ -175,7 +176,8 @@ public class MpTransactionState extends TransactionState
                 non_local_hsids[i] = m_useHSIds.get(i);
 
                 if (m_remoteWork.getTraceName() != null) {
-                    VoltTrace.beginAsync(m_remoteWork.getTraceName(), "sendFragment", "mpsite", txnId,
+                    VoltTrace.beginAsync(m_remoteWork.getTraceName(), "sendFragment", "mpsite",
+                                         MiscUtils.hsIdPairTxnIdToString(m_mbox.getHSId(), non_local_hsids[i], txnId),
                                          "txnId", TxnEgo.txnIdToString(txnId),
                                          "dest", CoreUtils.hsIdToString(non_local_hsids[i]));
                 }
@@ -252,7 +254,8 @@ public class MpTransactionState extends TransactionState
             while (!checkDoneReceivingFragResponses()) {
                 FragmentResponseMessage msg = pollForResponses();
                 if (m_remoteWork.getTraceName() != null) {
-                    VoltTrace.endAsync(m_remoteWork.getTraceName(), "sendFragment", "mpsite", txnId,
+                    VoltTrace.endAsync(m_remoteWork.getTraceName(), "sendFragment", "mpsite",
+                                       MiscUtils.hsIdPairTxnIdToString(m_mbox.getHSId(), msg.m_sourceHSId, txnId),
                                        "status", Byte.toString(msg.getStatusCode()));
                 }
                 boolean expectedMsg = handleReceivedFragResponse(msg);
@@ -274,7 +277,8 @@ public class MpTransactionState extends TransactionState
             borrowmsg.addInputDepMap(m_remoteDepTables);
         }
         if (m_localWork.getTraceName() != null) {
-            VoltTrace.beginAsync(m_localWork.getTraceName(), "sendBorrow", "mpsite", txnId,
+            VoltTrace.beginAsync(m_localWork.getTraceName(), "sendBorrow", "mpsite",
+                                 MiscUtils.hsIdPairTxnIdToString(m_mbox.getHSId(), m_buddyHSId, txnId),
                                  "txnId", TxnEgo.txnIdToString(txnId),
                                  "dest", CoreUtils.hsIdToString(m_buddyHSId));
         }
@@ -284,7 +288,8 @@ public class MpTransactionState extends TransactionState
         while (true){
             msg = pollForResponses();
             if (m_localWork.getTraceName() != null) {
-                VoltTrace.endAsync(m_localWork.getTraceName(), "sendBorrow", "mpsite", txnId,
+                VoltTrace.endAsync(m_localWork.getTraceName(), "sendBorrow", "mpsite",
+                                   MiscUtils.hsIdPairTxnIdToString(m_mbox.getHSId(), m_buddyHSId, txnId),
                                    "status", Byte.toString(msg.getStatusCode()));
             }
             assert(msg.getTableCount() > 0);
