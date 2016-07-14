@@ -104,6 +104,7 @@ public class MpProcedureTask extends ProcedureTask
     public void run(SiteProcedureConnection siteConnection)
     {
         if (m_msg.getStoredProcedureInvocation().getTraceName() != null) {
+            VoltTrace.meta(m_msg.getStoredProcedureInvocation().getTraceName(), "thread_name", "name", Thread.currentThread().getName());
             VoltTrace.beginDuration(m_msg.getStoredProcedureInvocation().getTraceName(), "MPInitTask", "mpsite",
                                     "txnId", TxnEgo.txnIdToString(getTxnId()));
         }
