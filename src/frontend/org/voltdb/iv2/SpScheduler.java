@@ -721,7 +721,7 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
         final DuplicateCounterKey dcKey = new DuplicateCounterKey(message.getTxnId(), spHandle);
         DuplicateCounter counter = m_duplicateCounters.get(dcKey);
         final String traceId;
-        if (counter != null && counter.getInvocation().getTraceName() != null) {
+        if ((counter != null && counter.getInvocation().getTraceName() != null) || message.getTraceName() != null) {
             traceId = MiscUtils.hsIdPairTxnIdToString(m_mailbox.getHSId(), message.m_sourceHSId, message.getSpHandle());
         } else {
             traceId = null;
