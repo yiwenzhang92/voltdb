@@ -294,14 +294,14 @@ public class VoltTrace {
     }
 
     public static void beginAsync(String fileName, String name, String category, Object id, String... args) {
-        s_tracer.queueEvent(new TraceEvent(fileName, TraceEventType.ASYNC_BEGIN, name, category, id.toString(), args));
+        s_tracer.queueEvent(new TraceEvent(fileName, TraceEventType.ASYNC_BEGIN, name, category, String.valueOf(id), args));
     }
 
     public static void endAsync(String fileName, String name, String category, Object id, String... args) {
-        s_tracer.queueEvent(new TraceEvent(fileName, TraceEventType.ASYNC_END, name, category, id.toString(), args));
+        s_tracer.queueEvent(new TraceEvent(fileName, TraceEventType.ASYNC_END, name, category, String.valueOf(id), args));
     }
     public static void instantAsync(String fileName, String name, String category, Object id, String... args) {
-        s_tracer.queueEvent(new TraceEvent(fileName, TraceEventType.ASYNC_INSTANT, name, category, id.toString(), args));
+        s_tracer.queueEvent(new TraceEvent(fileName, TraceEventType.ASYNC_INSTANT, name, category, String.valueOf(id), args));
     }
 
     public static void close(String fileName) {
