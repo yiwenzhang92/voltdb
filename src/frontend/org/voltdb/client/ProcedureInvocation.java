@@ -32,22 +32,28 @@ import org.voltdb.utils.SerializationHelper;
 public class ProcedureInvocation {
 
     public static final char TRACE_NAME_DELIMITER = '#';
-    public static final Pattern PROC_NAME_PATTERN =
-        Pattern.compile("^(" + TRACE_NAME_DELIMITER + "(?<tracename>.*)" + TRACE_NAME_DELIMITER + ")?(?<procname>.*)$");
     public static String extractProcName(String s) {
-        final Matcher matcher = PROC_NAME_PATTERN.matcher(s);
-        if (matcher.matches()) {
-            return matcher.group("procname");
+        if (s.charAt(0) != TRACE_NAME_DELIMITER) {
+            return s;
+        }
+
+        final int endPos = s.indexOf(TRACE_NAME_DELIMITER, 1);
+        if (endPos != -1 && s.getBytes().length > endPos + 1) {
+            return s.substring(endPos + 1);
         } else {
-            return null;
+            return s;
         }
     }
     public static String extractTraceName(String s) {
-        final Matcher matcher = PROC_NAME_PATTERN.matcher(s);
-        if (matcher.matches()) {
-            return matcher.group("tracename");
-        } else {
+        if (s.charAt(0) != TRACE_NAME_DELIMITER) {
             return null;
+        }
+
+        final int endPos = s.indexOf(TRACE_NAME_DELIMITER, 1);
+        if (endPos != -1) {
+            return s.substring(1, endPos);
+        } else {
+            return s;
         }
     }
 
