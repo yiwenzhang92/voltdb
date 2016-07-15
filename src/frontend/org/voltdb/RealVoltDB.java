@@ -145,6 +145,7 @@ import org.voltdb.utils.PlatformProperties;
 import org.voltdb.utils.SystemStatsCollector;
 import org.voltdb.utils.VoltFile;
 import org.voltdb.utils.VoltSampler;
+import org.voltdb.utils.VoltTrace;
 
 import com.google_voltpatches.common.base.Charsets;
 import com.google_voltpatches.common.base.Joiner;
@@ -3008,6 +3009,7 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
             }
         }
         startResourceUsageMonitor();
+        VoltTrace.startTracer();
 
         try {
             if (m_adminListener != null) {
@@ -3206,6 +3208,7 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
             // Start listening on the DR ports
             prepareReplication();
             startResourceUsageMonitor();
+            VoltTrace.startTracer();
 
             // Allow export datasources to start consuming their binary deques safely
             // as at this juncture the initial truncation snapshot is already complete

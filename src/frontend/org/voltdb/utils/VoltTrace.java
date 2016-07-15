@@ -27,21 +27,27 @@ import org.codehaus.jackson.JsonProcessingException;
 import org.codehaus.jackson.annotate.JsonIgnore;
 import org.codehaus.jackson.annotate.JsonProperty;
 import org.codehaus.jackson.map.JsonSerializer;
-import org.codehaus.jackson.map.ObjectMapper;
 import org.codehaus.jackson.map.SerializerProvider;
 import org.codehaus.jackson.map.annotate.JsonSerialize;
+import org.voltcore.logging.Level;
+import org.voltcore.logging.VoltLogger;
 import org.voltcore.utils.CoreUtils;
 
 /**
- *TODO:
+ * Utility class to log Chrome Trace Event format trace messages into files.
+ * Trace events are queued in this class, which are then picked up TraceFileWriter.
+ * When the queue reaches its limit, events are dropped on the floor with a rate limited log.
  */
 public class VoltTrace {
+    private static final VoltLogger s_logger = new VoltLogger("TRACER");
+
+    // Current process id. Used by all trace events.
     private static int s_pid = -1;
     static {
         try {
             s_pid = Integer.parseInt(CoreUtils.getPID());
         } catch(NumberFormatException e) {
-            //TODO:
+            s_logger.warn("Error getting current process id. Trace events will record incorrect process id", e);
         }
     }
 
@@ -87,6 +93,10 @@ public class VoltTrace {
         }
     }
 
+    /**
+     * Trace event class annotated with JSON annotations to serialize events in the exact format
+     * required by Chrome.
+     */
     @JsonSerialize(include=JsonSerialize.Inclusion.NON_NULL)
     public static class TraceEvent {
         private String m_fileName;
@@ -132,6 +142,13 @@ public class VoltTrace {
             }
         }
 
+        /**
+         * Use the nanoTime of the first event for this file to set the sync time.
+         * This is used to sync first event time on all volt nodes to zero and thus
+         * make it easy to visualize multiple volt node traces.
+         *
+         * @param syncNanos
+         */
         public void setSyncNanos(long syncNanos) {
             m_ts = (m_nanos - syncNanos)/1000.0;
         }
@@ -206,6 +223,10 @@ public class VoltTrace {
             return m_nanos;
         }
 
+        /**
+         * The event timestamp in microseconds.
+         * @return
+         */
         @JsonSerialize(using = CustomDoubleSerializer.class)
         public double getTs() {
             return m_ts;
@@ -227,6 +248,9 @@ public class VoltTrace {
         }
     }
 
+    /**
+     * Custom serializer to seralize doubles in an easily readable format in the trace file.
+     */
     private static class CustomDoubleSerializer extends JsonSerializer<Double> {
 
         private DecimalFormat m_format = new DecimalFormat("#0.00");
@@ -243,7 +267,9 @@ public class VoltTrace {
     }
 
     private static int QUEUE_SIZE = 1024;
-    private static VoltTrace s_tracer = new VoltTrace();
+    private static VoltTrace s_tracer;
+    // Events from trace producers are put into this queue.
+    // TraceFileWriter takes events from this queue and writes them to files.
     private LinkedBlockingQueue<TraceEvent> m_traceEvents = new LinkedBlockingQueue<>(QUEUE_SIZE);
 
     private VoltTrace() {
@@ -253,7 +279,9 @@ public class VoltTrace {
     private void queueEvent(TraceEvent event) {
         boolean queued = m_traceEvents.offer(event);
         if (!queued) {
-            //TODO: rate limited log?
+            s_logger.rateLimitedLog(60, Level.WARN, null,
+                "Trace event queue has reached its max capacity of %d. Dropping trace event for file %s",
+                QUEUE_SIZE, event.getFileName());
         }
     }
 
@@ -261,49 +289,73 @@ public class VoltTrace {
         return m_traceEvents.take();
     }
 
-    public static void main(String[] args) throws Exception {
-        String[] eargs = { "One", "1", "Two", "2" };
-        TraceEvent event = new TraceEvent("fileName", TraceEventType.METADATA, "test", "cat1", null, eargs);
-        ObjectMapper mapper = new ObjectMapper();
-        String str = mapper.writeValueAsString(event);
-        System.out.println("JSON=" + str);
-        event = mapper.readValue(str, TraceEvent.class);
-        str = mapper.writeValueAsString(event);
-        System.out.println("JSON looped around=" + str);
-    }
-
+    /**
+     * Logs a metadata trace event.
+     */
     public static void meta(String fileName, String name, String... args) {
         s_tracer.queueEvent(new TraceEvent(fileName, TraceEventType.METADATA, name, null, null, args));
     }
 
+    /**
+     * Logs an instant trace event.
+     */
     public static void instant(String fileName, String name, String category, String... args) {
         s_tracer.queueEvent(new TraceEvent(fileName, TraceEventType.INSTANT, name, category, null, args));
     }
 
+    /**
+     * Logs a begin duration trace event.
+     */
     public static void beginDuration(String fileName, String name, String category, String... args) {
         s_tracer.queueEvent(new TraceEvent(fileName, TraceEventType.DURATION_BEGIN, name, category, null, args));
     }
 
+    /**
+     * Logs an end duration trace event.
+     */
     public static void endDuration(String fileName) {
         s_tracer.queueEvent(new TraceEvent(fileName, TraceEventType.DURATION_END, null, null, null));
     }
 
+    /**
+     * Logs a begin async trace event.
+     */
     public static void beginAsync(String fileName, String name, String category, Object id, String... args) {
         s_tracer.queueEvent(new TraceEvent(fileName, TraceEventType.ASYNC_BEGIN, name, category, id.toString(), args));
     }
 
+    /**
+     * Logs an end async trace event.
+     */
     public static void endAsync(String fileName, String name, String category, Object id, String... args) {
         s_tracer.queueEvent(new TraceEvent(fileName, TraceEventType.ASYNC_END, name, category, id.toString(), args));
     }
+
+    /**
+     * Logs an async instant trace event.
+     */
     public static void instantAsync(String fileName, String name, String category, Object id, String... args) {
         s_tracer.queueEvent(new TraceEvent(fileName, TraceEventType.ASYNC_INSTANT, name, category, id.toString(), args));
     }
 
+    /**
+     * Closes the given file. Further trace events to this file will be ignored.
+     */
     public static void close(String fileName) {
         s_tracer.queueEvent(new TraceEvent(fileName, TraceEventType.VOLT_INTERNAL_CLOSE, null, null, null));
     }
 
-    public static boolean hasEvents() {
+    /**
+     * Returns true if there are events in the tracer's queue. False otherwise.
+     * Used by tests only.
+     */
+    static boolean hasEvents() {
         return !s_tracer.m_traceEvents.isEmpty();
+    }
+
+    public static void startTracer() {
+        if (s_tracer == null) {
+            s_tracer = new VoltTrace();
+        }
     }
 }

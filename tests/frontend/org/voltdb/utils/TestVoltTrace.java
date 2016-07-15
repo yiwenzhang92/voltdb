@@ -48,6 +48,8 @@ public class TestVoltTrace extends TestCase {
 
     @Override
     public void setUp() throws Exception {
+        System.setProperty("VOLT_JUSTATEST", "YESYESYES");
+        VoltTrace.startTracer();
         cleanupTraceFiles();
     }
 

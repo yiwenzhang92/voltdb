@@ -26,18 +26,26 @@ import java.util.Map;
 import java.util.Map.Entry;
 
 import org.codehaus.jackson.map.ObjectMapper;
+import org.voltcore.logging.Level;
+import org.voltcore.logging.VoltLogger;
+import org.voltdb.VoltDB;
 
 
 /**
- *TODO:
+ * Reads trace events from VoltTrace queue and writes them to files.
  */
 public class TraceFileWriter implements Runnable {
+    // If we reach MAX_OPEN_TRACES, old entries with last access time earlier than this delay value will be removed.
     public static final String PURGE_SECONDS_DELAY_PROP = "TRACE_PURGE_DELAY_SECONDS";
     public static final int PURGE_SECONDS_DELAY = Integer.getInteger(PURGE_SECONDS_DELAY_PROP, 30);
     static long PURGE_MILLIS_DELAY = PURGE_SECONDS_DELAY*1000;
+    // Number of open files allowed.
     public static final int MAX_OPEN_TRACES = 16;
 
+    private static final VoltLogger s_logger = new VoltLogger("TRACER");
+
     private final ObjectMapper m_jsonMapper = new ObjectMapper();
+    private final String m_traceFilesDir;
     private final VoltTrace m_voltTrace;
     private boolean m_shutdown;
     private Map<String, BufferedWriter> m_fileWriters = new LinkedHashMap<>(16, 0.75F, true);
@@ -45,6 +53,12 @@ public class TraceFileWriter implements Runnable {
 
     public TraceFileWriter(VoltTrace voltTrace) {
         m_voltTrace = voltTrace;
+        if (VoltDB.isThisATest()) {
+            m_traceFilesDir = ".";
+        } else {
+            m_traceFilesDir = VoltDB.instance().getCatalogContext().getDeployment()
+                .getPaths().getVoltdbroot().getPath();
+        }
     }
 
     public void run() {
@@ -71,13 +85,10 @@ public class TraceFileWriter implements Runnable {
                     bw.flush();
                 }
             } catch(InterruptedException e) {
-                e.printStackTrace();
-                //TODO: log that thread got interrupted
+                s_logger.info("Volt trace file writer thread interrupted. Stopping trace file writer.");
                 m_shutdown = true;
             } catch(IOException e) { // also catches JSON exceptions
-                e.printStackTrace();
-                // TODO: OK to assume something went really bad?
-                //TODO: log exception and log that thread is exiting
+                s_logger.warn("Unexpected IO exception in trace file writer. Stopping trace file writer.", e);
                 m_shutdown = true;
             }
         }
@@ -94,20 +105,24 @@ public class TraceFileWriter implements Runnable {
             bw.flush();
             bw.close();
         } catch(IOException e) {
-            //TODO: Debug log
+            if (s_logger.isDebugEnabled()) {
+                s_logger.debug("Exception closing trace file buffered writer", e);
+            }
         }
         m_fileWriters.remove(fileName);
         m_fileTimeInfo.remove(fileName);
     }
 
-    private void startTraceFile(VoltTrace.TraceEvent event) {
+    private void startTraceFile(VoltTrace.TraceEvent event) throws IOException {
         BufferedWriter bw = m_fileWriters.get(event.getFileName());
         if (bw != null) return;
 
         File file = new File(event.getFileName());
         // if the file exists already, we don't want to overwrite
         if (file.exists()) {
-            // TODO: log
+            s_logger.rateLimitedLog(60, Level.WARN, null,
+                "Trace file %s already exists. Dropping trace events to avoid overwriting the file",
+                event.getFileName());
             return;
         }
 
@@ -119,22 +134,19 @@ public class TraceFileWriter implements Runnable {
                     > PURGE_MILLIS_DELAY) {
                 handleCloseEvent(key);
             } else { // no entries to remove. Don't allow this trace
-                //TODO: rate limited log
+                s_logger.rateLimitedLog(60, Level.WARN, null,
+                        "Number of trace files have reached the max of %d. Dropping %c trace event for file %s",
+                        MAX_OPEN_TRACES, event.getTypeChar(), event.getFileName());
                 return;
             }
         }
 
-        try {
-            //TODO: Path and full file name
-            // Uses the default platform encoding for now.
-            bw = new BufferedWriter(new FileWriter(event.getFileName()));
-            m_fileWriters.put(event.getFileName(), bw);
-            m_fileTimeInfo.put(event.getFileName(), new FileTimeInfo(event.getNanos()));
-            bw.write("[");
-            bw.flush();
-        } catch(IOException e) {
-            //TODO: rate limited log
-        }
+        // Uses the default platform encoding for now.
+        bw = new BufferedWriter(new FileWriter(new File(m_traceFilesDir, event.getFileName())));
+        m_fileWriters.put(event.getFileName(), bw);
+        m_fileTimeInfo.put(event.getFileName(), new FileTimeInfo(event.getNanos()));
+        bw.write("[");
+        bw.flush();
     }
 
     private static class FileTimeInfo {
