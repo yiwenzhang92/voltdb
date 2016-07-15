@@ -52,7 +52,7 @@ public class VoltTrace {
     }
 
     private static Map<Character, TraceEventType> s_typeMap = new HashMap<>();
-    public static enum TraceEventType {
+    public enum TraceEventType {
 
         ASYNC_BEGIN('b'),
         ASYNC_END('e'),
@@ -75,11 +75,13 @@ public class VoltTrace {
         OBJECT_DESTROYED('D'),
         OBJECT_SNAPSHOT('O'),
         SAMPLE('P'),
-        VOLT_INTERNAL_CLOSE('z');
+
+        VOLT_INTERNAL_CLOSE('z'),
+        VOLT_INTERNAL_CLOSE_ALL('Z');
 
         private final char m_typeChar;
 
-        private TraceEventType(char typeChar) {
+        TraceEventType(char typeChar) {
             m_typeChar = typeChar;
             s_typeMap.put(typeChar, this);
         }
@@ -271,9 +273,12 @@ public class VoltTrace {
     // Events from trace producers are put into this queue.
     // TraceFileWriter takes events from this queue and writes them to files.
     private LinkedBlockingQueue<TraceEvent> m_traceEvents = new LinkedBlockingQueue<>(QUEUE_SIZE);
+    private final Thread m_writerThread;
 
     private VoltTrace() {
-        new Thread(new TraceFileWriter(this)).start();
+        m_writerThread = new Thread(new TraceFileWriter(this));
+        m_writerThread.setDaemon(true);
+        m_writerThread.start();
     }
 
     private void queueEvent(TraceEvent event) {
@@ -321,21 +326,21 @@ public class VoltTrace {
      * Logs a begin async trace event.
      */
     public static void beginAsync(String fileName, String name, String category, Object id, String... args) {
-        s_tracer.queueEvent(new TraceEvent(fileName, TraceEventType.ASYNC_BEGIN, name, category, id.toString(), args));
+        s_tracer.queueEvent(new TraceEvent(fileName, TraceEventType.ASYNC_BEGIN, name, category, String.valueOf(id), args));
     }
 
     /**
      * Logs an end async trace event.
      */
     public static void endAsync(String fileName, String name, String category, Object id, String... args) {
-        s_tracer.queueEvent(new TraceEvent(fileName, TraceEventType.ASYNC_END, name, category, id.toString(), args));
+        s_tracer.queueEvent(new TraceEvent(fileName, TraceEventType.ASYNC_END, name, category, String.valueOf(id), args));
     }
 
     /**
      * Logs an async instant trace event.
      */
     public static void instantAsync(String fileName, String name, String category, Object id, String... args) {
-        s_tracer.queueEvent(new TraceEvent(fileName, TraceEventType.ASYNC_INSTANT, name, category, id.toString(), args));
+        s_tracer.queueEvent(new TraceEvent(fileName, TraceEventType.ASYNC_INSTANT, name, category, String.valueOf(id), args));
     }
 
     /**
@@ -344,6 +349,20 @@ public class VoltTrace {
     public static void close(String fileName) {
         s_tracer.queueEvent(new TraceEvent(fileName, TraceEventType.VOLT_INTERNAL_CLOSE, null, null, null));
     }
+    
+    /**
+     * Close all open files and wait for shutdown.
+     * @param timeOutMillis    Timeout in milliseconds. Negative to not wait,
+     *                         0 to wait forever, positive to wait for given
+     *                         number of milliseconds.
+     */
+    public static void closeAllAndShutdown(long timeOutMillis) {
+        s_tracer.queueEvent(new TraceEvent(null, TraceEventType.VOLT_INTERNAL_CLOSE_ALL, null, null, null));
+        if (timeOutMillis >= 0) {
+            try { s_tracer.m_writerThread.join(timeOutMillis); } catch (InterruptedException e) {}
+        }
+    }
+
 
     /**
      * Returns true if there are events in the tracer's queue. False otherwise.

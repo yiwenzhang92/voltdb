@@ -156,11 +156,8 @@ public class StoredProcedureInvocation implements JSONString {
 
     private void parseName()
     {
-        final Matcher matcher = ProcedureInvocation.PROC_NAME_PATTERN.matcher(fullProcName);
-        if (matcher.matches()) {
-            traceName = matcher.group("tracename");
-            procName = matcher.group("procname");
-        }
+        traceName = ProcedureInvocation.extractTraceName(fullProcName);
+        procName = ProcedureInvocation.extractProcName(fullProcName);
     }
 
     public long getOriginalTxnId() {

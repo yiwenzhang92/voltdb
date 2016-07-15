@@ -20,6 +20,7 @@ package org.voltdb.jni;
 import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
 import java.util.ArrayDeque;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -597,7 +598,8 @@ public abstract class ExecutionEngine implements FastDeserializer.Deserializatio
             if (m_traceFilename != null) {
                 VoltTrace.beginDuration(m_traceFilename, "execPlanFragment", "spsite",
                                         "txnId", TxnEgo.txnIdToString(txnId),
-                                        "partition", Integer.toString(m_partitionId));
+                                        "partition", Integer.toString(m_partitionId),
+                                        "sql", Arrays.toString(m_sqlTexts));
             }
 
             VoltTable[] results = coreExecutePlanFragments(numFragmentIds, planFragmentIds, inputDepIds,

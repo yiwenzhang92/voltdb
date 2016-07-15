@@ -68,6 +68,9 @@ public class TraceFileWriter implements Runnable {
                 boolean firstRow = false;
                 if (event.getType()==VoltTrace.TraceEventType.VOLT_INTERNAL_CLOSE) {
                     handleCloseEvent(event.getFileName());
+                } else if (event.getType()== VoltTrace.TraceEventType.VOLT_INTERNAL_CLOSE_ALL) {
+                    handleCloseAllEvent();
+                    m_shutdown = true;
                 } else {
                     if (m_fileWriters.get(event.getFileName()) == null) {
                         firstRow = true;
@@ -91,6 +94,12 @@ public class TraceFileWriter implements Runnable {
                 s_logger.warn("Unexpected IO exception in trace file writer. Stopping trace file writer.", e);
                 m_shutdown = true;
             }
+        }
+    }
+
+    private void handleCloseAllEvent() {
+        for (String file : m_fileWriters.keySet().toArray(new String[0])) {
+            handleCloseEvent(file);
         }
     }
 
