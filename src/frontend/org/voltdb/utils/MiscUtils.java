@@ -935,11 +935,20 @@ public class MiscUtils {
     }
 
     public static String hsIdTxnIdToString(long hsId, long txnId) {
-        return CoreUtils.hsIdToString(hsId) + " " + TxnEgo.txnIdToString(txnId);
+        final StringBuilder sb = new StringBuilder();
+        CoreUtils.hsIdToString(hsId, sb);
+        sb.append(" ");
+        TxnEgo.txnIdToString(txnId, sb);
+        return sb.toString();
     }
 
     public static String hsIdPairTxnIdToString(long srcHsId, long destHsId, long txnId) {
-        return CoreUtils.hsIdToString(srcHsId) + "->" + CoreUtils.hsIdToString(destHsId) +
-               " " + TxnEgo.txnIdToString(txnId);
+        final StringBuilder sb = new StringBuilder(32);
+        CoreUtils.hsIdToString(srcHsId, sb);
+        sb.append("->");
+        CoreUtils.hsIdToString(destHsId, sb);
+        sb.append(" ");
+        TxnEgo.txnIdToString(txnId, sb);
+        return sb.toString();
     }
 }

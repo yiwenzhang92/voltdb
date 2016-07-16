@@ -19,8 +19,6 @@ package org.voltdb.client;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import org.voltdb.ParameterSet;
 import org.voltdb.utils.SerializationHelper;
