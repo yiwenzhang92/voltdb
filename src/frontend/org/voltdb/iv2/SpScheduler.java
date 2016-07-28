@@ -156,7 +156,7 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
     private final UniqueIdGenerator m_uniqueIdGenerator;
 
     // the current not-needed-any-more point of the repair log.
-    long m_repairLogTruncationHandle = Long.MIN_VALUE;
+    long m_repairLogTruncationHandle;
 
     SpScheduler(int partitionId, SiteTaskerQueue taskQueue, SnapshotCompletionMonitor snapMonitor)
     {
@@ -168,6 +168,9 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
 
         // try to get the global default setting for read consistency, but fall back to SAFE
         m_defaultConsistencyReadLevel = VoltDB.Configuration.getDefaultReadConsistencyLevel();
+
+        // initialize the initial truncation point to be the starting transaction id.
+        m_repairLogTruncationHandle = getCurrentTxnId();
     }
 
     @Override
@@ -694,6 +697,7 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
                 m_mailbox.send(message.getInitiatorHSId(), message);
                 return;
             }
+
             if (m_defaultConsistencyReadLevel == ReadLevel.SAFE) {
                 // InvocationDispatcher rounts SAFE reads to SPI only
                 assert(m_isLeader);
@@ -701,8 +705,6 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
                 m_bufferedReadLog.offerSp(message, m_repairLogTruncationHandle);
                 return;
             }
-            // SAFE mode Reads on replicas of its SPI will be here
-            // but it's impossible except the test cases.
         }
 
         final long spHandle = message.getSpHandle();
@@ -714,13 +716,21 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
                 m_duplicateCounters.remove(dcKey);
                 m_repairLogTruncationHandle = spHandle;
                 m_mailbox.send(counter.m_destinationId, counter.getLastResponse());
+
+                if (m_defaultConsistencyReadLevel == ReadLevel.SAFE) {
+                    // writes have been acked from its replicas, now it's safe to release reads.
+                    assert(! message.isReadOnly());
+                    assert(m_bufferedReadLog != null);
+                    m_bufferedReadLog.releaseBufferedRead(m_repairLogTruncationHandle);
+                }
             }
             else if (result == DuplicateCounter.MISMATCH) {
                 VoltDB.crashGlobalVoltDB("HASH MISMATCH: replicas produced different results.", true, null);
             }
         }
         else {
-            // the initiatorHSId is the ClientInterface mailbox. Yeah. I know.
+            // the initiatorHSId is the ClientInterface mailbox.
+            // this will be on SPI without k-safety or replica only with k-safety
             m_repairLogTruncationHandle = spHandle;
             m_mailbox.send(message.getInitiatorHSId(), message);
         }
