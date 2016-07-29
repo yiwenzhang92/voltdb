@@ -53,15 +53,7 @@ public class RandomMsgGenerator
 
     RandomMsgGenerator()
     {
-        init(System.currentTimeMillis());
-    }
-
-    RandomMsgGenerator(long seed)
-    {
-        init(seed);
-    }
-
-    private void init(long seed) {
+        long seed = System.currentTimeMillis();
         System.out.println("Running with seed: " + seed);
         m_rand = new Random(seed);
         m_mpiTxnEgo = TxnEgo.makeZero(MpInitiator.MP_INIT_PID);

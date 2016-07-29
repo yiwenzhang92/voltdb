@@ -511,17 +511,17 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
             // Don't replicate reads, not matter FAST or SAFE.
             if (m_isLeader && (!msg.isReadOnly()) && (m_sendToHSIds.length > 0)) {
                 Iv2InitiateTaskMessage replmsg =
-                        new Iv2InitiateTaskMessage(m_mailbox.getHSId(),
-                                m_mailbox.getHSId(),
-                                m_repairLogTruncationHandle,
-                                msg.getTxnId(),
-                                msg.getUniqueId(),
-                                msg.isReadOnly(),
-                                msg.isSinglePartition(),
-                                msg.getStoredProcedureInvocation(),
-                                msg.getClientInterfaceHandle(),
-                                msg.getConnectionId(),
-                                msg.isForReplay());
+                    new Iv2InitiateTaskMessage(m_mailbox.getHSId(),
+                            m_mailbox.getHSId(),
+                            m_repairLogTruncationHandle,
+                            msg.getTxnId(),
+                            msg.getUniqueId(),
+                            msg.isReadOnly(),
+                            msg.isSinglePartition(),
+                            msg.getStoredProcedureInvocation(),
+                            msg.getClientInterfaceHandle(),
+                            msg.getConnectionId(),
+                            msg.isForReplay());
                 // Update the handle in the copy since the constructor doesn't set it
                 replmsg.setSpHandle(newSpHandle);
                 m_mailbox.send(m_sendToHSIds, replmsg);

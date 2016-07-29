@@ -52,6 +52,7 @@ import org.voltcore.utils.EstTime;
 import org.voltcore.utils.RateLimitedLogger;
 import org.voltdb.AuthSystem.AuthUser;
 import org.voltdb.ClientInterface.ExplainMode;
+import org.voltdb.Consistency.ReadLevel;
 import org.voltdb.SystemProcedureCatalog.Config;
 import org.voltdb.VoltTable.ColumnInfo;
 import org.voltdb.catalog.CatalogMap;
@@ -1534,7 +1535,7 @@ public final class InvocationDispatcher {
          * Someday could support per-transaction consistency for reads.
          */
         if (isSinglePartition && !isEveryPartition) {
-            if (isReadOnly && m_defaultConsistencyReadLevel.hasShortcutRead()) {
+            if (isReadOnly && (m_defaultConsistencyReadLevel == ReadLevel.FAST)) {
                 initiatorHSId = m_localReplicas.get().get(partition);
             }
             if (initiatorHSId != null) {

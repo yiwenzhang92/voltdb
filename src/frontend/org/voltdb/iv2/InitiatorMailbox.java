@@ -260,14 +260,10 @@ public class InitiatorMailbox implements Mailbox
                     }
                 }
             });
-            return;
-        }
-
-        // VoltDB never puts scheduler in a separate thread with site
-        // So the code below is never used now
-        // TODO: remove me
-        synchronized (this) {
-            deliverInternal(message);
+        } else {
+            synchronized (this) {
+                deliverInternal(message);
+            }
         }
     }
 
@@ -287,11 +283,11 @@ public class InitiatorMailbox implements Mailbox
             handleLogRequest(message);
             return;
         }
-        if (message instanceof Iv2RepairLogResponseMessage) {
+        else if (message instanceof Iv2RepairLogResponseMessage) {
             m_algo.deliver(message);
             return;
         }
-        if (message instanceof RejoinMessage) {
+        else if (message instanceof RejoinMessage) {
             m_joinProducer.deliver((RejoinMessage) message);
             return;
         }
