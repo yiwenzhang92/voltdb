@@ -21,44 +21,91 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 
 import org.voltcore.messaging.Mailbox;
+import org.voltcore.messaging.VoltMessage;
+import org.voltdb.messaging.FragmentResponseMessage;
 import org.voltdb.messaging.InitiateResponseMessage;
 
 public class BufferedReadLog
 {
-    final Deque<InitiateResponseMessage> m_bufferedReadSp;
+    public static class Item {
+        InitiateResponseMessage m_initiateMsg;
+        FragmentResponseMessage m_fragmentMsg;
+
+        Item(InitiateResponseMessage msg) {
+            m_initiateMsg = msg;
+            m_fragmentMsg = null;
+        }
+
+        Item(FragmentResponseMessage msg) {
+            m_initiateMsg = null;
+            m_fragmentMsg = msg;
+        }
+
+        long getSpHandle() {
+            if (m_initiateMsg != null) {
+                return m_initiateMsg.getSpHandle();
+            }
+            return m_fragmentMsg.getSpHandle();
+        }
+
+        long getResponseHSId() {
+            if (m_initiateMsg != null) {
+                return m_initiateMsg.getInitiatorHSId();
+            }
+            return m_fragmentMsg.getDestinationSiteId();
+        }
+
+        VoltMessage getMessage() {
+            if (m_initiateMsg != null) {
+                return m_initiateMsg;
+            }
+            return m_fragmentMsg;
+        }
+    }
+
+    final Deque<Item> m_bufferedReadSp;
     Mailbox m_mailbox;
 
     BufferedReadLog(Mailbox mailbox)
     {
-        m_bufferedReadSp = new ArrayDeque<InitiateResponseMessage>();
+        m_bufferedReadSp = new ArrayDeque<Item>();
 
         assert(mailbox != null);
         m_mailbox = mailbox;
     }
 
-    //  SPI offers a new message.
     public void offerSp(InitiateResponseMessage msg, long handle)
     {
-        if (msg.getSpHandle() <= handle) {
-            m_mailbox.send(msg.getInitiatorHSId(), msg);
+        offerSp(new Item(msg), handle);
+    }
+
+    public void offerSp(FragmentResponseMessage msg, long handle)
+    {
+        offerSp(new Item(msg), handle);
+    }
+
+    //  SPI offers a new message.
+    private void offerSp(Item item, long handle) {
+        if (item.getSpHandle() <= handle) {
+            m_mailbox.send(item.getResponseHSId(), item.getMessage());
         } else {
-            m_bufferedReadSp.add(msg);
+            m_bufferedReadSp.add(item);
         }
         releaseBufferedRead(handle);
     }
 
+
     public void releaseBufferedRead(long spHandle)
     {
-        Deque<InitiateResponseMessage> deq = m_bufferedReadSp;
-        InitiateResponseMessage msg = null;
-        while ((msg = deq.peek()) != null) {
-            if (msg.getSpHandle() > spHandle) {
-                return;
+        Deque<Item> deq = m_bufferedReadSp;
+        Item item = null;
+        while ((item = deq.peek()) != null) {
+            if (item.getSpHandle() <= spHandle) {
+                // when the sp reads' handle is less equal than truncation handle
+                // we know any previous write has been confirmed and it's safe to release.
+                m_mailbox.send(item.getResponseHSId(), item.getMessage());
+                deq.poll();
             }
-            // when the sp reads' handle is less equal than truncation handle
-            // we know any previous write has been confirmed and it's safe to release.
-            m_mailbox.send(msg.getInitiatorHSId(), msg);
-            deq.poll();
         }
     }
 }

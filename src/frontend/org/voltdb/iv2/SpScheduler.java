@@ -699,7 +699,7 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
             }
 
             if (m_defaultConsistencyReadLevel == ReadLevel.SAFE) {
-                // InvocationDispatcher rounts SAFE reads to SPI only
+                // InvocationDispatcher routes SAFE reads to SPI only
                 assert(m_isLeader);
                 assert(m_bufferedReadLog != null);
                 m_bufferedReadLog.offerSp(message, m_repairLogTruncationHandle);
@@ -875,13 +875,7 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
             // actually log until we create a TransactionTask, though, so just keep track
             // of whether it needs to be done.
             if (msg.getInitiateTask() != null) {
-                /**
-                 * A shortcut read is a read operation sent to any replica and completed with no
-                 * confirmation or communication with other replicas. In a partition scenario, it's
-                 * possible to read an unconfirmed transaction's writes that will be lost.
-                 */
-                final boolean shortcutRead = msg.getInitiateTask().isReadOnly() && (m_defaultConsistencyReadLevel == ReadLevel.FAST);
-                logThis = !shortcutRead;
+                logThis = !msg.getInitiateTask().isReadOnly();
             }
         }
 
@@ -983,6 +977,12 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
                 // sure we write ours into the message getting sent to the MPI
                 resp.setExecutorSiteId(m_mailbox.getHSId());
                 m_mailbox.send(counter.m_destinationId, resp);
+
+                if (m_defaultConsistencyReadLevel == ReadLevel.SAFE) {
+                    // writes have been acked from its replicas, now it's safe to release reads.
+                    assert(m_bufferedReadLog != null);
+                    m_bufferedReadLog.releaseBufferedRead(m_repairLogTruncationHandle);
+                }
             }
             else if (result == DuplicateCounter.MISMATCH) {
                 VoltDB.crashGlobalVoltDB("HASH MISMATCH running multi-part procedure.", true, null);
@@ -991,10 +991,24 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
             return;
         }
 
-        // FragmentResponse on SPI if without k-safety, or on replica with k-safety
-        if (m_isLeader && message.getSpHandle() > m_repairLogTruncationHandle) {
-            m_repairLogTruncationHandle = message.getSpHandle();
+        TransactionState txn = m_outstandingTxns.get(message.getTxnId());
+        if (txn != null) {
+            if (txn.isReadOnly()) {
+                // FragmentResponse on SPI if without k-safety, or on replica with k-safety
+                assert(m_isLeader);
+                assert(m_bufferedReadLog != null);
+                if (m_defaultConsistencyReadLevel == ReadLevel.SAFE) {
+                    m_bufferedReadLog.offerSp(message, m_repairLogTruncationHandle);
+                    return;
+                }
+            } else {
+                // writes may update the truncation handle
+                if (m_isLeader && message.getSpHandle() > m_repairLogTruncationHandle) {
+                    m_repairLogTruncationHandle = message.getSpHandle();
+                }
+            }
         }
+
         m_mailbox.send(message.getDestinationSiteId(), message);
     }
 

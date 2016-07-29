@@ -195,7 +195,8 @@ public class TestSpSchedulerDedupe extends TestCase
         long primary_hsid = 1111l;
 
         createObjs();
-        FragmentTaskMessage sptask = createFrag(txnid, true, primary_hsid);
+        // read only message will not be received on replicas.
+        FragmentTaskMessage sptask = createFrag(txnid, false, primary_hsid);
         dut.deliver(sptask);
         // verify no response sent yet
         verify(mbox, times(0)).send(anyLong(), (VoltMessage)anyObject());
