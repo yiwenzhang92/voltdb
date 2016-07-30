@@ -20,6 +20,7 @@ package org.voltdb.iv2;
 import java.util.ArrayDeque;
 import java.util.Deque;
 
+import org.voltcore.logging.VoltLogger;
 import org.voltcore.messaging.Mailbox;
 import org.voltcore.messaging.VoltMessage;
 import org.voltdb.messaging.FragmentResponseMessage;
@@ -27,6 +28,8 @@ import org.voltdb.messaging.InitiateResponseMessage;
 
 public class BufferedReadLog
 {
+    private static final VoltLogger hostLog = new VoltLogger("HOST");
+
     public static class Item {
         InitiateResponseMessage m_initiateMsg;
         FragmentResponseMessage m_fragmentMsg;
@@ -65,6 +68,7 @@ public class BufferedReadLog
 
     final Deque<Item> m_bufferedReadSp;
     Mailbox m_mailbox;
+    int m_maxCount = -1;
 
     BufferedReadLog(Mailbox mailbox)
     {
@@ -92,6 +96,11 @@ public class BufferedReadLog
             m_bufferedReadSp.add(item);
         }
         releaseBufferedRead(handle);
+
+        if (m_bufferedReadSp.size() > m_maxCount) {
+            m_maxCount = m_bufferedReadSp.size();
+            hostLog.info("max buffered read log size: " + m_maxCount);
+        }
     }
 
 

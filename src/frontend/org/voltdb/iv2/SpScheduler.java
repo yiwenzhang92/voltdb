@@ -155,9 +155,6 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
     // Generator of pre-IV2ish timestamp based unique IDs
     private final UniqueIdGenerator m_uniqueIdGenerator;
 
-    // the current not-needed-any-more point of the repair log.
-    long m_repairLogTruncationHandle;
-
     SpScheduler(int partitionId, SiteTaskerQueue taskQueue, SnapshotCompletionMonitor snapMonitor)
     {
         super(partitionId, taskQueue);
@@ -168,9 +165,6 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
 
         // try to get the global default setting for read consistency, but fall back to SAFE
         m_defaultConsistencyReadLevel = VoltDB.Configuration.getDefaultReadConsistencyLevel();
-
-        // initialize the initial truncation point to be the starting transaction id.
-        m_repairLogTruncationHandle = getCurrentTxnId();
     }
 
     @Override
@@ -1219,9 +1213,8 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
         m_defaultConsistencyReadLevel = readLevel;
     }
 
-    public void setBufferedReadLog() {
-        if (m_defaultConsistencyReadLevel == ReadLevel.SAFE) {
-            m_bufferedReadLog = new BufferedReadLog(m_mailbox);
-        }
+    @Override
+    public void setBufferedReadLog(BufferedReadLog bufferedReadLog) {
+        m_bufferedReadLog = bufferedReadLog;
     }
 }

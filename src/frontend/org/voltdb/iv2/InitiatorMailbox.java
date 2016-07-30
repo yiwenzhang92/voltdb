@@ -64,6 +64,7 @@ public class InitiatorMailbox implements Mailbox
     protected final Scheduler m_scheduler;
     protected final HostMessenger m_messenger;
     protected final RepairLog m_repairLog;
+    protected final BufferedReadLog m_bufferedReadlog;
     private final JoinProducerBase m_joinProducer;
     private final LeaderCacheReader m_masterLeaderCache;
     private long m_hsId;
@@ -156,6 +157,9 @@ public class InitiatorMailbox implements Mailbox
          * Only used for an assertion on locking.
          */
         m_allInitiatorMailboxes.add(this);
+
+        m_bufferedReadlog = new BufferedReadLog(this);
+        m_scheduler.setBufferedReadLog(m_bufferedReadlog);
     }
 
     public JoinProducerBase getJoinProducer()
@@ -425,4 +429,10 @@ public class InitiatorMailbox implements Mailbox
         if (m_joinProducer == null) return;
         m_joinProducer.notifyOfSnapshotNonce(nonce, snapshotSpHandle);
     }
+
+    public BufferedReadLog getBufferedReadLog() {
+        return m_bufferedReadlog;
+    }
+
+
 }
