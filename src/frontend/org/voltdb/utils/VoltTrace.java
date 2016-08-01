@@ -20,16 +20,15 @@ import java.io.IOException;
 import java.text.DecimalFormat;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.function.Supplier;
 
+import com.google.common.collect.EvictingQueue;
 import org.codehaus.jackson.JsonGenerator;
-import org.codehaus.jackson.JsonProcessingException;
 import org.codehaus.jackson.annotate.JsonIgnore;
 import org.codehaus.jackson.annotate.JsonProperty;
 import org.codehaus.jackson.map.JsonSerializer;
 import org.codehaus.jackson.map.SerializerProvider;
 import org.codehaus.jackson.map.annotate.JsonSerialize;
-import org.voltcore.logging.Level;
 import org.voltcore.logging.VoltLogger;
 import org.voltcore.utils.CoreUtils;
 
@@ -49,6 +48,10 @@ public class VoltTrace {
         } catch(NumberFormatException e) {
             s_logger.warn("Error getting current process id. Trace events will record incorrect process id", e);
         }
+    }
+
+    public enum Category {
+        CI, MPI, MPSITE, SPI, SPSITE, EE
     }
 
     private static Map<Character, TraceEventType> s_typeMap = new HashMap<>();
@@ -104,7 +107,7 @@ public class VoltTrace {
         private String m_fileName;
         private TraceEventType m_type;
         private String m_name;
-        private String m_category;
+        private Category m_category;
         private String m_id;
         private long m_tid;
         private long m_nanos;
@@ -119,7 +122,7 @@ public class VoltTrace {
         public TraceEvent(String fileName,
                 TraceEventType type,
                 String name,
-                String category,
+                Category category,
                 String asyncId,
                 String... args) {
             m_fileName = fileName;
@@ -180,7 +183,11 @@ public class VoltTrace {
         }
 
         public String getName() {
-            return m_name;
+            if (m_name != null) {
+                return m_name;
+            } else {
+                return null;
+            }
         }
 
         public void setName(String name) {
@@ -189,11 +196,15 @@ public class VoltTrace {
 
         @JsonProperty("cat")
         public String getCategory() {
-            return m_category;
+            if (m_category != null) {
+                return m_category.name();
+            } else {
+                return null;
+            }
         }
 
         @JsonProperty("cat")
-        public void setCategory(String cat) {
+        public void setCategory(Category cat) {
             m_category = cat;
         }
 
@@ -259,7 +270,7 @@ public class VoltTrace {
 
         @Override
         public void serialize(Double value, JsonGenerator jsonGen, SerializerProvider sp)
-                throws IOException, JsonProcessingException {
+                throws IOException {
             if (value == null) {
                 jsonGen.writeNull();
             } else {
@@ -272,7 +283,7 @@ public class VoltTrace {
     private static VoltTrace s_tracer;
     // Events from trace producers are put into this queue.
     // TraceFileWriter takes events from this queue and writes them to files.
-    private LinkedBlockingQueue<TraceEvent> m_traceEvents = new LinkedBlockingQueue<>(QUEUE_SIZE);
+    private EvictingQueue<Supplier<TraceEvent>> m_traceEvents = EvictingQueue.create(QUEUE_SIZE);
     private final Thread m_writerThread;
 
     private VoltTrace() {
@@ -281,75 +292,79 @@ public class VoltTrace {
         m_writerThread.start();
     }
 
-    private void queueEvent(TraceEvent event) {
-        boolean queued = m_traceEvents.offer(event);
-        if (!queued) {
-            s_logger.rateLimitedLog(60, Level.WARN, null,
-                "Trace event queue has reached its max capacity of %d. Dropping trace event for file %s",
-                QUEUE_SIZE, event.getFileName());
+    private synchronized void queueEvent(Supplier<TraceEvent> s) {
+        m_traceEvents.offer(s);
+        // If queue is full, drop events
+    }
+
+    public synchronized TraceEvent takeEvent() throws InterruptedException {
+        final Supplier<TraceEvent> e = m_traceEvents.poll();
+        if (e != null) {
+            return e.get();
+        } else {
+            return null;
         }
     }
 
-    public TraceEvent takeEvent() throws InterruptedException {
-        return m_traceEvents.take();
+    public static void add(Supplier<TraceEvent> s) {
+        s_tracer.queueEvent(s);
     }
-
     /**
      * Logs a metadata trace event.
      */
-    public static void meta(String fileName, String name, String... args) {
-        s_tracer.queueEvent(new TraceEvent(fileName, TraceEventType.METADATA, name, null, null, args));
+    public static TraceEvent meta(String fileName, String name, String... args) {
+        return new TraceEvent(fileName, TraceEventType.METADATA, name, null, null, args);
     }
 
     /**
      * Logs an instant trace event.
      */
-    public static void instant(String fileName, String name, String category, String... args) {
-        s_tracer.queueEvent(new TraceEvent(fileName, TraceEventType.INSTANT, name, category, null, args));
+    public static TraceEvent instant(String fileName, String name, Category category, String... args) {
+        return new TraceEvent(fileName, TraceEventType.INSTANT, name, category, null, args);
     }
 
     /**
      * Logs a begin duration trace event.
      */
-    public static void beginDuration(String fileName, String name, String category, String... args) {
-        s_tracer.queueEvent(new TraceEvent(fileName, TraceEventType.DURATION_BEGIN, name, category, null, args));
+    public static TraceEvent beginDuration(String fileName, String name, Category category, String... args) {
+        return new TraceEvent(fileName, TraceEventType.DURATION_BEGIN, name, category, null, args);
     }
 
     /**
      * Logs an end duration trace event.
      */
-    public static void endDuration(String fileName) {
-        s_tracer.queueEvent(new TraceEvent(fileName, TraceEventType.DURATION_END, null, null, null));
+    public static TraceEvent endDuration(String fileName) {
+        return new TraceEvent(fileName, TraceEventType.DURATION_END, null, null, null);
     }
 
     /**
      * Logs a begin async trace event.
      */
-    public static void beginAsync(String fileName, String name, String category, Object id, String... args) {
-        s_tracer.queueEvent(new TraceEvent(fileName, TraceEventType.ASYNC_BEGIN, name, category, String.valueOf(id), args));
+    public static TraceEvent beginAsync(String fileName, String name, Category category, Object id, String... args) {
+        return new TraceEvent(fileName, TraceEventType.ASYNC_BEGIN, name, category, String.valueOf(id), args);
     }
 
     /**
      * Logs an end async trace event.
      */
-    public static void endAsync(String fileName, String name, String category, Object id, String... args) {
-        s_tracer.queueEvent(new TraceEvent(fileName, TraceEventType.ASYNC_END, name, category, String.valueOf(id), args));
+    public static TraceEvent endAsync(String fileName, String name, Category category, Object id, String... args) {
+        return new TraceEvent(fileName, TraceEventType.ASYNC_END, name, category, String.valueOf(id), args);
     }
 
     /**
      * Logs an async instant trace event.
      */
-    public static void instantAsync(String fileName, String name, String category, Object id, String... args) {
-        s_tracer.queueEvent(new TraceEvent(fileName, TraceEventType.ASYNC_INSTANT, name, category, String.valueOf(id), args));
+    public static TraceEvent instantAsync(String fileName, String name, Category category, Object id, String... args) {
+        return new TraceEvent(fileName, TraceEventType.ASYNC_INSTANT, name, category, String.valueOf(id), args);
     }
 
     /**
      * Closes the given file. Further trace events to this file will be ignored.
      */
     public static void close(String fileName) {
-        s_tracer.queueEvent(new TraceEvent(fileName, TraceEventType.VOLT_INTERNAL_CLOSE, null, null, null));
+        s_tracer.queueEvent(() -> new TraceEvent(fileName, TraceEventType.VOLT_INTERNAL_CLOSE, null, null, null));
     }
-    
+
     /**
      * Close all open files and wait for shutdown.
      * @param timeOutMillis    Timeout in milliseconds. Negative to not wait,
@@ -357,19 +372,20 @@ public class VoltTrace {
      *                         number of milliseconds.
      */
     public static void closeAllAndShutdown(long timeOutMillis) {
-        s_tracer.queueEvent(new TraceEvent(null, TraceEventType.VOLT_INTERNAL_CLOSE_ALL, null, null, null));
+        s_tracer.queueEvent(() -> new TraceEvent(null, TraceEventType.VOLT_INTERNAL_CLOSE_ALL, null, null, null));
         if (timeOutMillis >= 0) {
             try { s_tracer.m_writerThread.join(timeOutMillis); } catch (InterruptedException e) {}
         }
     }
-
 
     /**
      * Returns true if there are events in the tracer's queue. False otherwise.
      * Used by tests only.
      */
     static boolean hasEvents() {
-        return !s_tracer.m_traceEvents.isEmpty();
+        synchronized (s_tracer) {
+            return !s_tracer.m_traceEvents.isEmpty();
+        }
     }
 
     public static void startTracer() {

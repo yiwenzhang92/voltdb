@@ -24,6 +24,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.concurrent.locks.LockSupport;
 
 import org.codehaus.jackson.map.ObjectMapper;
 import org.voltcore.logging.Level;
@@ -65,6 +66,11 @@ public class TraceFileWriter implements Runnable {
         while (!m_shutdown) {
             try {
                 VoltTrace.TraceEvent event = m_voltTrace.takeEvent();
+                if (event == null) {
+                    LockSupport.parkNanos(1L);
+                    continue;
+                }
+
                 boolean firstRow = false;
                 if (event.getType()==VoltTrace.TraceEventType.VOLT_INTERNAL_CLOSE) {
                     handleCloseEvent(event.getFileName());

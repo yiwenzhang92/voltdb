@@ -40,6 +40,8 @@ import org.codehaus.jackson.map.ObjectMapper;
 
 import junit.framework.TestCase;
 
+import static org.voltdb.utils.VoltTrace.Category.CI;
+
 public class TestVoltTrace extends TestCase {
 
     private static final String FILE_NAME_PREFIX = "tracetest";
@@ -86,9 +88,7 @@ public class TestVoltTrace extends TestCase {
             VoltTrace.close(FILE_NAME_PREFIX + i);
         }
 
-        while (VoltTrace.hasEvents()) {
-            Thread.sleep(250);
-        }
+        VoltTrace.closeAllAndShutdown(0);
 
         for (int i=0; i<fileCount; i++) {
             verifyFileContents(senders[i].getSentList(), FILE_NAME_PREFIX+i);
@@ -99,7 +99,8 @@ public class TestVoltTrace extends TestCase {
         TraceFileWriter.PURGE_MILLIS_DELAY = 30000;
         int maxFiles = TraceFileWriter.MAX_OPEN_TRACES;
         for (int i=0; i<maxFiles; i++) {
-            VoltTrace.meta(FILE_NAME_PREFIX+i, "name"+i);
+            int finalI = i;
+            VoltTrace.add(() -> VoltTrace.meta(FILE_NAME_PREFIX+ finalI, "name"+ finalI));
         }
 
         while (VoltTrace.hasEvents()) {
@@ -109,7 +110,7 @@ public class TestVoltTrace extends TestCase {
         assertEquals(maxFiles, count);
 
         // One more should not increase the count
-        VoltTrace.meta(FILE_NAME_PREFIX+maxFiles, "name"+maxFiles);
+        VoltTrace.add(() -> VoltTrace.meta(FILE_NAME_PREFIX+maxFiles, "name"+maxFiles));
         while (VoltTrace.hasEvents()) {
             Thread.sleep(250);
         }
@@ -119,7 +120,7 @@ public class TestVoltTrace extends TestCase {
 
         // Closing one should allow one more trace
         VoltTrace.close(FILE_NAME_PREFIX+"0");
-        VoltTrace.meta(FILE_NAME_PREFIX+maxFiles, "name"+maxFiles);
+        VoltTrace.add(() -> VoltTrace.meta(FILE_NAME_PREFIX+maxFiles, "name"+maxFiles));
         while (VoltTrace.hasEvents()) {
             Thread.sleep(250);
         }
@@ -138,14 +139,15 @@ public class TestVoltTrace extends TestCase {
         int maxFiles = TraceFileWriter.MAX_OPEN_TRACES;
         long startTime = System.currentTimeMillis();
         for (int i=0; i<maxFiles; i++) {
-            VoltTrace.meta(FILE_NAME_PREFIX+i, "name"+i);
+            int finalI = i;
+            VoltTrace.add(() -> VoltTrace.meta(FILE_NAME_PREFIX+ finalI, "name"+ finalI));
         }
 
         // wait till purge time is up
         while ((System.currentTimeMillis()-startTime) < 1000) {
             Thread.sleep(500);
         }
-        VoltTrace.meta(FILE_NAME_PREFIX+maxFiles, "name"+maxFiles);
+        VoltTrace.add(() -> VoltTrace.meta(FILE_NAME_PREFIX+maxFiles, "name"+maxFiles));
         while (VoltTrace.hasEvents()) {
             Thread.sleep(250);
         }
@@ -213,7 +215,7 @@ public class TestVoltTrace extends TestCase {
 
     private VoltTrace.TraceEvent randomDurationBegin(String fileName) {
         return new VoltTrace.TraceEvent(fileName, VoltTrace.TraceEventType.DURATION_BEGIN,
-                "name"+m_random.nextInt(5), "cat"+m_random.nextInt(5), null, randomArgs());
+                "name"+m_random.nextInt(5), CI, null, randomArgs());
     }
 
     private VoltTrace.TraceEvent randomDurationEnd(String fileName) {
@@ -225,7 +227,7 @@ public class TestVoltTrace extends TestCase {
         VoltTrace.TraceEventType type = (begin) ?
                 VoltTrace.TraceEventType.ASYNC_BEGIN : VoltTrace.TraceEventType.ASYNC_END;
         return new VoltTrace.TraceEvent(fileName, type, "name"+m_random.nextInt(5),
-                "cat"+m_random.nextInt(5), Long.toString(m_random.nextLong()), randomArgs());
+                CI, Long.toString(m_random.nextLong()), randomArgs());
     }
 
     private VoltTrace.TraceEvent randomInstant(String fileName, boolean async) {
@@ -233,7 +235,7 @@ public class TestVoltTrace extends TestCase {
                 VoltTrace.TraceEventType.ASYNC_INSTANT : VoltTrace.TraceEventType.INSTANT;
         String id = (async) ? Long.toString(m_random.nextLong()) : null;
         return new VoltTrace.TraceEvent(fileName, type,
-                "name"+m_random.nextInt(5), "cat"+m_random.nextInt(5),
+                "name"+m_random.nextInt(5), CI,
                 id, randomArgs());
     }
 
@@ -312,27 +314,35 @@ public class TestVoltTrace extends TestCase {
                     }
                     switch(event.getType()) {
                     case ASYNC_BEGIN:
-                        VoltTrace.beginAsync(event.getFileName(), event.getName(), event.getCategory(),
-                                event.getId(), args);
+                        VoltTrace.add(() -> VoltTrace.beginAsync(event.getFileName(), event.getName(),
+                                                                 VoltTrace.Category.valueOf(event.getCategory()),
+                                                                 event.getId(), args));
                         break;
                     case ASYNC_END:
-                        VoltTrace.endAsync(event.getFileName(), event.getName(), event.getCategory(),
-                                event.getId(), args);
+                        VoltTrace.add(() -> VoltTrace.endAsync(event.getFileName(), event.getName(),
+                                                               VoltTrace.Category.valueOf(event.getCategory()),
+                                                               event.getId(), args));
                         break;
                     case ASYNC_INSTANT:
-                        VoltTrace.instantAsync(event.getFileName(), event.getName(), event.getCategory(), event.getId(), args);
+                        VoltTrace.add(() -> VoltTrace.instantAsync(event.getFileName(), event.getName(),
+                                                                   VoltTrace.Category.valueOf(event.getCategory()),
+                                                                   event.getId(), args));
                         break;
                     case DURATION_BEGIN:
-                        VoltTrace.beginDuration(event.getFileName(), event.getName(), event.getCategory(), args);
+                        VoltTrace.add(() -> VoltTrace.beginDuration(event.getFileName(), event.getName(),
+                                                                    VoltTrace.Category.valueOf(event.getCategory()),
+                                                                    args));
                         break;
                     case DURATION_END:
-                        VoltTrace.endDuration(event.getFileName());
+                        VoltTrace.add(() -> VoltTrace.endDuration(event.getFileName()));
                         break;
                     case INSTANT:
-                        VoltTrace.instant(event.getFileName(), event.getName(), event.getCategory(), args);
+                        VoltTrace.add(() -> VoltTrace.instant(event.getFileName(), event.getName(),
+                                                              VoltTrace.Category.valueOf(event.getCategory()),
+                                                              args));
                         break;
                     case METADATA:
-                        VoltTrace.meta(event.getFileName(), event.getName(), args);
+                        VoltTrace.add(() -> VoltTrace.meta(event.getFileName(), event.getName(), args));
                         break;
                     default:
                         throw new IllegalArgumentException("Unsupported event type: " + event.getType());
