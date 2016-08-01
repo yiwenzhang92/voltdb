@@ -141,13 +141,12 @@ Table* ExecutorContext::executeExecutors(const std::vector<AbstractExecutor*>& e
     size_t ttl = executorList.size();
     int ctr = 0;
 
-    char name[32];
-
     try {
         BOOST_FOREACH (AbstractExecutor *executor, executorList) {
             assert(executor);
 
             if (isTraceOn()) {
+                char name[32];
                 snprintf(name, 32, "%s", planNodeToString(executor->getPlanNode()->getPlanNodeType()).c_str());
                 m_topEnd->traceLog(true, name, NULL);
             }

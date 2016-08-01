@@ -149,17 +149,17 @@ public class SpDurabilityListener implements DurabilityListener {
                 if (o instanceof SpProcedureTask) {
                     final Iv2InitiateTaskMessage msg = (Iv2InitiateTaskMessage) o.getTransactionState().getNotice();
                     if (msg.getStoredProcedureInvocation().getTraceName() != null) {
-                        VoltTrace.endAsync(msg.getStoredProcedureInvocation().getTraceName(),
-                                           "durability", "spi",
+                        VoltTrace.add(() -> VoltTrace.endAsync(msg.getStoredProcedureInvocation().getTraceName(),
+                                           "durability", VoltTrace.Category.SPI,
                                            MiscUtils.hsIdTxnIdToString(m_spScheduler.m_mailbox.getHSId(),
-                                                                       msg.getSpHandle()));
+                                                                       msg.getSpHandle())));
                     }
                 } else if (o instanceof FragmentTask) {
                     if (((FragmentTask) o).m_fragmentMsg.getTraceName() != null) {
-                        VoltTrace.endAsync(((FragmentTask) o).m_fragmentMsg.getTraceName(),
-                                           "durability", "spi",
+                        VoltTrace.add(() -> VoltTrace.endAsync(((FragmentTask) o).m_fragmentMsg.getTraceName(),
+                                           "durability", VoltTrace.Category.SPI,
                                            MiscUtils.hsIdTxnIdToString(m_spScheduler.m_mailbox.getHSId(),
-                                                                       ((FragmentTask) o).m_fragmentMsg.getSpHandle()));
+                                                                       ((FragmentTask) o).m_fragmentMsg.getSpHandle())));
                     }
                 }
 

@@ -78,10 +78,10 @@ public class FragmentTask extends TransactionTask
     @Override
     protected void durabilityTraceEnd() {
         if (m_fragmentMsg.getTraceName() != null) {
-            VoltTrace.endAsync(m_fragmentMsg.getTraceName(),
+            VoltTrace.add(() -> VoltTrace.endAsync(m_fragmentMsg.getTraceName(),
                                "durability",
-                               "spi",
-                               MiscUtils.hsIdTxnIdToString(m_initiator.getHSId(), m_fragmentMsg.getSpHandle()));
+                               VoltTrace.Category.SPI,
+                               MiscUtils.hsIdTxnIdToString(m_initiator.getHSId(), m_fragmentMsg.getSpHandle())));
         }
     }
 
@@ -93,9 +93,9 @@ public class FragmentTask extends TransactionTask
             hostLog.debug("STARTING: " + this);
         }
         if (m_fragmentMsg.getTraceName() != null) {
-            VoltTrace.beginDuration(m_fragmentMsg.getTraceName(), "runFragmentTask", "spsite",
+            VoltTrace.add(() -> VoltTrace.beginDuration(m_fragmentMsg.getTraceName(), "runfragmenttask", VoltTrace.Category.SPSITE,
                                     "txnId", TxnEgo.txnIdToString(getTxnId()),
-                                    "partition", Integer.toString(siteConnection.getCorrespondingPartitionId()));
+                                    "partition", Integer.toString(siteConnection.getCorrespondingPartitionId())));
         }
 
         // if this has a procedure name from the initiation bundled,
@@ -138,7 +138,7 @@ public class FragmentTask extends TransactionTask
             hostLog.debug("COMPLETE: " + this);
         }
         if (m_fragmentMsg.getTraceName() != null) {
-            VoltTrace.endDuration(m_fragmentMsg.getTraceName());
+            VoltTrace.add(() -> VoltTrace.endDuration(m_fragmentMsg.getTraceName()));
         }
     }
 

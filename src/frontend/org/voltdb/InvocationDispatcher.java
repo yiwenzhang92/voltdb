@@ -267,10 +267,10 @@ public final class InvocationDispatcher {
         final CatalogContext catalogContext = m_catalogContext.get();
 
         if (task.getTraceName() != null) {
-            VoltTrace.meta(task.getTraceName(), "process_name", "name", CoreUtils.getHostnameOrAddress());
-            VoltTrace.meta(task.getTraceName(), "thread_name", "name", Thread.currentThread().getName());
-            VoltTrace.meta(task.getTraceName(), "thread_sort_index", "sort_index", Integer.toString(1));
-            VoltTrace.beginAsync(task.getTraceName(), "recvTxn", "ci", task.getClientHandle());
+            VoltTrace.add(() -> VoltTrace.meta(task.getTraceName(), "process_name", "name", CoreUtils.getHostnameOrAddress()));
+            VoltTrace.add(() -> VoltTrace.meta(task.getTraceName(), "thread_name", "name", Thread.currentThread().getName()));
+            VoltTrace.add(() -> VoltTrace.meta(task.getTraceName(), "thread_sort_index", "sort_index", Integer.toString(1)));
+            VoltTrace.add(() -> VoltTrace.beginAsync(task.getTraceName(), "recvtxn", VoltTrace.Category.CI, task.getClientHandle()));
         }
 
         Procedure catProc = getProcedureFromName(task.getProcName(), catalogContext);
@@ -1109,8 +1109,9 @@ public final class InvocationDispatcher {
             InvocationClientHandler handler, Connection ccxn, ExplainMode explainMode,
             String sql, Object[] userParams, Object[] userPartitionKey, AuthSystem.AuthUser user) {
         if (task.getTraceName() != null) {
-            VoltTrace.beginAsync(task.getTraceName(), "planAdHoc", "ci", task.getClientHandle(),
-                                 "sql", sql);
+            VoltTrace.add(() -> VoltTrace.beginAsync(task.getTraceName(), "planadhoc", VoltTrace.Category.CI,
+                                                     task.getClientHandle(),
+                                                     "sql", sql));
         }
 
         List<String> sqlStatements = SQLLexer.splitStatements(sql);
@@ -1154,7 +1155,9 @@ public final class InvocationDispatcher {
                         ExplainMode explainMode = plannedStmtBatch.getExplainMode();
 
                         if (plannedStmtBatch.work.traceName != null) {
-                            VoltTrace.endAsync(plannedStmtBatch.work.traceName, "planAdHoc", "ci", plannedStmtBatch.clientHandle);
+                            VoltTrace.add(() -> VoltTrace.endAsync(plannedStmtBatch.work.traceName,
+                                                                   "planadhoc", VoltTrace.Category.CI,
+                                                                   plannedStmtBatch.clientHandle));
                         }
 
                         // assume all stmts have the same catalog version
@@ -1605,10 +1608,12 @@ public final class InvocationDispatcher {
                     isForReplay);
 
         if (invocation.getTraceName() != null) {
-            VoltTrace.instantAsync(invocation.getTraceName(), "initTxn", "ci", invocation.getClientHandle(),
-                                   "ciHandle", Long.toString(handle),
-                                   "partition", Integer.toString(partition),
-                                   "dest", CoreUtils.hsIdToString(initiatorHSId));
+            Long finalInitiatorHSId = initiatorHSId;
+            VoltTrace.add(() -> VoltTrace.instantAsync(invocation.getTraceName(), "inittxn", VoltTrace.Category.CI,
+                                                       invocation.getClientHandle(),
+                                                       "ciHandle", Long.toString(handle),
+                                                       "partition", Integer.toString(partition),
+                                                       "dest", CoreUtils.hsIdToString(finalInitiatorHSId)));
         }
 
         Iv2Trace.logCreateTransaction(workRequest);

@@ -924,9 +924,10 @@ public class ClientInterface implements SnapshotDaemon.DaemonInitiator {
                     clientResponse.getStatus());
 
             if (clientData.m_traceName != null) {
-                VoltTrace.endAsync(clientData.m_traceName, "recvTxn", "ci", clientData.m_clientHandle,
-                                   "status", Byte.toString(clientResponse.getStatus()),
-                                   "statusString", clientResponse.getStatusString());
+                VoltTrace.add(() -> VoltTrace.endAsync(clientData.m_traceName, "recvtxn", VoltTrace.Category.CI,
+                                                       clientData.m_clientHandle,
+                                                       "status", Byte.toString(clientResponse.getStatus()),
+                                                       "statusString", clientResponse.getStatusString()));
             }
 
             clientResponse.setClientHandle(clientData.m_clientHandle);
@@ -1368,9 +1369,10 @@ public class ClientInterface implements SnapshotDaemon.DaemonInitiator {
         final ClientResponseImpl errResp = m_dispatcher.dispatch(task, handler, ccxn, user);
 
         if (task.getTraceName() != null && errResp != null) {
-            VoltTrace.endAsync(task.getTraceName(), "recvTxn", "ci", task.getClientHandle(),
-                               "status", Byte.toString(errResp.getStatus()),
-                               "statusString", errResp.getStatusString());
+            VoltTrace.add(() -> VoltTrace.endAsync(task.getTraceName(), "recvtxn", VoltTrace.Category.CI,
+                                                   task.getClientHandle(),
+                                                   "status", Byte.toString(errResp.getStatus()),
+                                                   "statusString", errResp.getStatusString()));
         }
 
         return errResp;

@@ -251,11 +251,15 @@ public class MpScheduler extends Scheduler
         mpTxnId = ego.getTxnId();
 
         if (message.getStoredProcedureInvocation().getTraceName() != null) {
-            VoltTrace.meta(message.getStoredProcedureInvocation().getTraceName(), "process_name", "name", CoreUtils.getHostnameOrAddress());
-            VoltTrace.meta(message.getStoredProcedureInvocation().getTraceName(), "thread_name", "name", Thread.currentThread().getName());
-            VoltTrace.meta(message.getStoredProcedureInvocation().getTraceName(), "thread_sort_index", "sort_index", Integer.toString(100));
-            VoltTrace.beginAsync(message.getStoredProcedureInvocation().getTraceName(), "initMP", "mpi", mpTxnId,
-                                 "txnId", TxnEgo.txnIdToString(mpTxnId));
+            VoltTrace.add(() -> VoltTrace.meta(message.getStoredProcedureInvocation().getTraceName(),
+                                               "process_name", "name", CoreUtils.getHostnameOrAddress()));
+            VoltTrace.add(() -> VoltTrace.meta(message.getStoredProcedureInvocation().getTraceName(),
+                                               "thread_name", "name", Thread.currentThread().getName()));
+            VoltTrace.add(() -> VoltTrace.meta(message.getStoredProcedureInvocation().getTraceName(),
+                                               "thread_sort_index", "sort_index", Integer.toString(100)));
+            VoltTrace.add(() -> VoltTrace.beginAsync(message.getStoredProcedureInvocation().getTraceName(),
+                                                     "initmp", VoltTrace.Category.MPI, mpTxnId,
+                                                     "txnId", TxnEgo.txnIdToString(mpTxnId)));
         }
 
         // Don't have an SP HANDLE at the MPI, so fill in the unused value
@@ -427,7 +431,7 @@ public class MpScheduler extends Scheduler
     public void handleInitiateResponseMessage(InitiateResponseMessage message)
     {
         if (message.getTraceName() != null) {
-            VoltTrace.endAsync(message.getTraceName(), "initMP", "mpi", message.getTxnId());
+            VoltTrace.add(() -> VoltTrace.endAsync(message.getTraceName(), "initmp", VoltTrace.Category.MPI, message.getTxnId()));
         }
 
         DuplicateCounter counter = m_duplicateCounters.get(message.getTxnId());

@@ -176,10 +176,11 @@ public class MpTransactionState extends TransactionState
                 non_local_hsids[i] = m_useHSIds.get(i);
 
                 if (m_remoteWork.getTraceName() != null) {
-                    VoltTrace.beginAsync(m_remoteWork.getTraceName(), "sendFragment", "mpsite",
-                                         MiscUtils.hsIdPairTxnIdToString(m_mbox.getHSId(), non_local_hsids[i], txnId),
-                                         "txnId", TxnEgo.txnIdToString(txnId),
-                                         "dest", CoreUtils.hsIdToString(non_local_hsids[i]));
+                    int finalI = i;
+                    VoltTrace.add(() -> VoltTrace.beginAsync(m_remoteWork.getTraceName(), "sendfragment", VoltTrace.Category.MPSITE,
+                                                             MiscUtils.hsIdPairTxnIdToString(m_mbox.getHSId(), non_local_hsids[finalI], txnId),
+                                                             "txnId", TxnEgo.txnIdToString(txnId),
+                                                             "dest", CoreUtils.hsIdToString(non_local_hsids[finalI])));
                 }
             }
             // send to all non-local sites
@@ -254,9 +255,9 @@ public class MpTransactionState extends TransactionState
             while (!checkDoneReceivingFragResponses()) {
                 FragmentResponseMessage msg = pollForResponses();
                 if (m_remoteWork.getTraceName() != null) {
-                    VoltTrace.endAsync(m_remoteWork.getTraceName(), "sendFragment", "mpsite",
+                    VoltTrace.add(() -> VoltTrace.endAsync(m_remoteWork.getTraceName(), "sendfragment", VoltTrace.Category.MPSITE,
                                        MiscUtils.hsIdPairTxnIdToString(m_mbox.getHSId(), msg.m_sourceHSId, txnId),
-                                       "status", Byte.toString(msg.getStatusCode()));
+                                       "status", Byte.toString(msg.getStatusCode())));
                 }
                 boolean expectedMsg = handleReceivedFragResponse(msg);
                 if (expectedMsg) {
@@ -277,10 +278,10 @@ public class MpTransactionState extends TransactionState
             borrowmsg.addInputDepMap(m_remoteDepTables);
         }
         if (m_localWork.getTraceName() != null) {
-            VoltTrace.beginAsync(m_localWork.getTraceName(), "sendBorrow", "mpsite",
+            VoltTrace.add(() -> VoltTrace.beginAsync(m_localWork.getTraceName(), "sendborrow", VoltTrace.Category.MPSITE,
                                  MiscUtils.hsIdPairTxnIdToString(m_mbox.getHSId(), m_buddyHSId, txnId),
                                  "txnId", TxnEgo.txnIdToString(txnId),
-                                 "dest", CoreUtils.hsIdToString(m_buddyHSId));
+                                 "dest", CoreUtils.hsIdToString(m_buddyHSId)));
         }
         m_mbox.send(m_buddyHSId, borrowmsg);
 
@@ -288,9 +289,10 @@ public class MpTransactionState extends TransactionState
         while (true){
             msg = pollForResponses();
             if (m_localWork.getTraceName() != null) {
-                VoltTrace.endAsync(m_localWork.getTraceName(), "sendBorrow", "mpsite",
+                final FragmentResponseMessage finalMsg = msg;
+                VoltTrace.add(() -> VoltTrace.endAsync(m_localWork.getTraceName(), "sendborrow", VoltTrace.Category.MPSITE,
                                    MiscUtils.hsIdPairTxnIdToString(m_mbox.getHSId(), m_buddyHSId, txnId),
-                                   "status", Byte.toString(msg.getStatusCode()));
+                                   "status", Byte.toString(finalMsg.getStatusCode())));
             }
             assert(msg.getTableCount() > 0);
             // If this is a restarted TXN, verify that this is not a stale message from a different Dependency

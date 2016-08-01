@@ -104,10 +104,13 @@ public class MpProcedureTask extends ProcedureTask
     public void run(SiteProcedureConnection siteConnection)
     {
         if (m_msg.getStoredProcedureInvocation().getTraceName() != null) {
-            VoltTrace.meta(m_msg.getStoredProcedureInvocation().getTraceName(), "thread_name", "name", Thread.currentThread().getName());
-            VoltTrace.meta(m_msg.getStoredProcedureInvocation().getTraceName(), "thread_sort_index", "sort_index", Integer.toString(1000));
-            VoltTrace.beginDuration(m_msg.getStoredProcedureInvocation().getTraceName(), "MPInitTask", "mpsite",
-                                    "txnId", TxnEgo.txnIdToString(getTxnId()));
+            VoltTrace.add(() -> VoltTrace.meta(m_msg.getStoredProcedureInvocation().getTraceName(),
+                                               "thread_name", "name", Thread.currentThread().getName()));
+            VoltTrace.add(() -> VoltTrace.meta(m_msg.getStoredProcedureInvocation().getTraceName(),
+                                               "thread_sort_index", "sort_index", Integer.toString(1000)));
+            VoltTrace.add(() -> VoltTrace.beginDuration(m_msg.getStoredProcedureInvocation().getTraceName(),
+                                                        "mpinittask", VoltTrace.Category.MPSITE,
+                                                        "txnId", TxnEgo.txnIdToString(getTxnId())));
         }
 
         hostLog.debug("STARTING: " + this);
@@ -190,7 +193,7 @@ public class MpProcedureTask extends ProcedureTask
         }
 
         if (m_msg.getStoredProcedureInvocation().getTraceName() != null) {
-            VoltTrace.endDuration(m_msg.getStoredProcedureInvocation().getTraceName());
+            VoltTrace.add(() -> VoltTrace.endDuration(m_msg.getStoredProcedureInvocation().getTraceName()));
         }
     }
 
@@ -211,10 +214,11 @@ public class MpProcedureTask extends ProcedureTask
     void completeInitiateTask(SiteProcedureConnection siteConnection)
     {
         if (m_msg.getStoredProcedureInvocation().getTraceName() != null) {
-            VoltTrace.instant(m_msg.getStoredProcedureInvocation().getTraceName(), "sendComplete", "mpsite",
-                              "txnId", TxnEgo.txnIdToString(getTxnId()),
-                              "commit", Boolean.toString(!m_txnState.needsRollback()),
-                              "dest", CoreUtils.hsIdCollectionToString(m_initiatorHSIds));
+            VoltTrace.add(() -> VoltTrace.instant(m_msg.getStoredProcedureInvocation().getTraceName(), "sendcomplete",
+                                                  VoltTrace.Category.MPSITE,
+                                                  "txnId", TxnEgo.txnIdToString(getTxnId()),
+                                                  "commit", Boolean.toString(!m_txnState.needsRollback()),
+                                                  "dest", CoreUtils.hsIdCollectionToString(m_initiatorHSIds)));
         }
 
         CompleteTransactionMessage complete = new CompleteTransactionMessage(

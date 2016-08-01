@@ -512,10 +512,11 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
                 final String traceName = msg.getStoredProcedureInvocation().getTraceName();
                 if (traceName != null) {
                     for (long hsId : m_sendToHSIds) {
-                        VoltTrace.beginAsync(traceName, "replicateSP", "spi",
-                                             MiscUtils.hsIdPairTxnIdToString(m_mailbox.getHSId(), hsId, msg.getSpHandle()),
-                                             "txnId", TxnEgo.txnIdToString(msg.getTxnId()),
-                                             "dest", CoreUtils.hsIdToString(hsId));
+                        Iv2InitiateTaskMessage finalMsg = msg;
+                        VoltTrace.add(() -> VoltTrace.beginAsync(traceName, "replicateSP", VoltTrace.Category.SPI,
+                                                                 MiscUtils.hsIdPairTxnIdToString(m_mailbox.getHSId(), hsId, finalMsg.getSpHandle()),
+                                                                 "txnId", TxnEgo.txnIdToString(finalMsg.getTxnId()),
+                                                                 "dest", CoreUtils.hsIdToString(hsId)));
                     }
                 }
 
@@ -569,14 +570,13 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
     {
         final String traceName = msg.getStoredProcedureInvocation().getTraceName();
         if (traceName != null) {
-            VoltTrace.meta(traceName, "process_name", "name", CoreUtils.getHostnameOrAddress());
-            VoltTrace.meta(traceName, "thread_name", "name", Thread.currentThread().getName());
-            VoltTrace.meta(traceName, "thread_sort_index", "sort_index", Integer.toString(10000));
-            VoltTrace.beginAsync(traceName, "initSP", "spi",
-                                 MiscUtils.hsIdPairTxnIdToString(m_mailbox.getHSId(), m_mailbox.getHSId(), msg.getSpHandle()),
+            VoltTrace.add(() -> VoltTrace.meta(traceName, "process_name", "name", CoreUtils.getHostnameOrAddress()));
+            VoltTrace.add(() -> VoltTrace.meta(traceName, "thread_name", "name", Thread.currentThread().getName()));
+            VoltTrace.add(() -> VoltTrace.meta(traceName, "thread_sort_index", "sort_index", Integer.toString(10000)));
+            VoltTrace.add(() -> VoltTrace.beginAsync(traceName, "initsp", VoltTrace.Category.SPI,
                                  "txnId", TxnEgo.txnIdToString(msg.getTxnId()),
                                  "partition", Integer.toString(m_partitionId),
-                                 "hsId", CoreUtils.hsIdToString(m_mailbox.getHSId()));
+                                 "hsId", CoreUtils.hsIdToString(m_mailbox.getHSId())));
         }
 
         /**
@@ -590,10 +590,10 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
             new SpProcedureTask(m_mailbox, procedureName, m_pendingTasks, msg, m_drGateway);
         if (!shortcutRead) {
             if (traceName != null) {
-                VoltTrace.beginAsync(traceName,
-                                     "durability", "spi", MiscUtils.hsIdTxnIdToString(m_mailbox.getHSId(), msg.getSpHandle()),
+                VoltTrace.add(() -> VoltTrace.beginAsync(traceName,
+                                     "durability", VoltTrace.Category.SPI, MiscUtils.hsIdTxnIdToString(m_mailbox.getHSId(), msg.getSpHandle()),
                                      "txnId", TxnEgo.txnIdToString(msg.getTxnId()),
-                                     "partition", Integer.toString(m_partitionId));
+                                     "partition", Integer.toString(m_partitionId)));
             }
 
             ListenableFuture<Object> durabilityBackpressureFuture =
@@ -732,7 +732,7 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
         // Also, don't update the truncation handle, since it won't have meaning for anyone.
         if (shortcutRead) {
             if (message.getTraceName() != null) {
-                VoltTrace.endAsync(message.getTraceName(), "initSP", "spi", traceId);
+                VoltTrace.add(() -> VoltTrace.endAsync(message.getTraceName(), "initsp", VoltTrace.Category.SPI, traceId));
             }
             // the initiatorHSId is the ClientInterface mailbox. Yeah. I know.
             m_mailbox.send(message.getInitiatorHSId(), message);
@@ -741,12 +741,13 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
 
         if (counter != null) {
             if (counter.getInvocation().getTraceName() != null) {
-                String traceName = "initSP";
+                String traceName = "initsp";
                 if (message.m_sourceHSId != m_mailbox.getHSId()) {
-                    traceName = "replicateSP";
+                    traceName = "replicatesp";
                 }
-                VoltTrace.endAsync(counter.getInvocation().getTraceName(), traceName, "spi", traceId,
-                                   "hash", String.valueOf(message.getClientResponseData().getHash()));
+                String finalTraceName = traceName;
+                VoltTrace.add(() -> VoltTrace.endAsync(counter.getInvocation().getTraceName(), finalTraceName, VoltTrace.Category.SPI, traceId,
+                                                       "hash", String.valueOf(message.getClientResponseData().getHash())));
             }
 
             int result = counter.offer(message);
@@ -761,7 +762,7 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
         }
         else {
             if (message.getTraceName() != null) {
-                VoltTrace.endAsync(message.getTraceName(), "initSP", "spi", traceId);
+                VoltTrace.add(() -> VoltTrace.endAsync(message.getTraceName(), "initsp", VoltTrace.Category.SPI, traceId));
             }
             // the initiatorHSId is the ClientInterface mailbox. Yeah. I know.
             m_repairLogTruncationHandle = spHandle;
@@ -780,12 +781,12 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
         Iv2Trace.logFragmentTaskMessage(message.getFragmentTaskMessage(),
                 m_mailbox.getHSId(), newSpHandle, true);
         if (message.getFragmentTaskMessage().getTraceName() != null) {
-            VoltTrace.beginAsync(message.getFragmentTaskMessage().getTraceName(),
-                                 "recvFragment", "spi",
+            VoltTrace.add(() -> VoltTrace.beginAsync(message.getFragmentTaskMessage().getTraceName(),
+                                 "recvfragment", VoltTrace.Category.SPI,
                                  MiscUtils.hsIdPairTxnIdToString(m_mailbox.getHSId(), m_mailbox.getHSId(), newSpHandle),
                                  "txnId", TxnEgo.txnIdToString(message.getTxnId()),
                                  "partition", Integer.toString(m_partitionId),
-                                 "hsId", CoreUtils.hsIdToString(m_mailbox.getHSId()));
+                                 "hsId", CoreUtils.hsIdToString(m_mailbox.getHSId())));
         }
 
         TransactionState txn = m_outstandingTxns.get(message.getTxnId());
@@ -863,11 +864,12 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
             if (m_sendToHSIds.length > 0 && (!shortcutRead || msg.isSysProcTask())) {
                 if (msg.getTraceName() != null) {
                     for (long hsId : m_sendToHSIds) {
-                        VoltTrace.beginAsync(msg.getTraceName(),
-                                             "replicateFragment", "spi",
-                                             MiscUtils.hsIdPairTxnIdToString(m_mailbox.getHSId(), hsId, msg.getSpHandle()),
-                                             "txnId", TxnEgo.txnIdToString(msg.getTxnId()),
-                                             "dest", CoreUtils.hsIdToString(hsId));
+                        FragmentTaskMessage finalMsg = msg;
+                        VoltTrace.add(() -> VoltTrace.beginAsync(finalMsg.getTraceName(),
+                                                                 "replicatefragment", VoltTrace.Category.SPI,
+                                                                 MiscUtils.hsIdPairTxnIdToString(m_mailbox.getHSId(), hsId, finalMsg.getSpHandle()),
+                                                                 "txnId", TxnEgo.txnIdToString(finalMsg.getTxnId()),
+                                                                 "dest", CoreUtils.hsIdToString(hsId)));
                     }
                 }
 
@@ -917,16 +919,16 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
     private void doLocalFragmentOffer(FragmentTaskMessage msg)
     {
         if (msg.getTraceName() != null) {
-            VoltTrace.meta(msg.getTraceName(), "process_name", "name", CoreUtils.getHostnameOrAddress());
-            VoltTrace.meta(msg.getTraceName(), "thread_name", "name", Thread.currentThread().getName());
-            VoltTrace.meta(msg.getTraceName(), "thread_sort_index", "sort_index", Integer.toString(10000));
-            VoltTrace.beginAsync(msg.getTraceName(),
-                                 "recvFragment", "spi",
+            VoltTrace.add(() -> VoltTrace.meta(msg.getTraceName(), "process_name", "name", CoreUtils.getHostnameOrAddress()));
+            VoltTrace.add(() -> VoltTrace.meta(msg.getTraceName(), "thread_name", "name", Thread.currentThread().getName()));
+            VoltTrace.add(() -> VoltTrace.meta(msg.getTraceName(), "thread_sort_index", "sort_index", Integer.toString(10000)));
+            VoltTrace.add(() -> VoltTrace.beginAsync(msg.getTraceName(),
+                                 "recvfragment", VoltTrace.Category.SPI,
                                  MiscUtils.hsIdPairTxnIdToString(m_mailbox.getHSId(), m_mailbox.getHSId(), msg.getSpHandle()),
                                  "txnId", TxnEgo.txnIdToString(msg.getTxnId()),
                                  "partition", Integer.toString(m_partitionId),
                                  "hsId", CoreUtils.hsIdToString(m_mailbox.getHSId()),
-                                 "final", Boolean.toString(msg.isFinalTask()));
+                                 "final", Boolean.toString(msg.isFinalTask())));
         }
 
         TransactionState txn = m_outstandingTxns.get(msg.getTxnId());
@@ -973,10 +975,11 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
         }
         if (logThis) {
             if (msg.getTraceName() != null) {
-                VoltTrace.beginAsync(msg.getTraceName(),
-                                     "durability", "spi", MiscUtils.hsIdTxnIdToString(m_mailbox.getHSId(), msg.getSpHandle()),
+                VoltTrace.add(() -> VoltTrace.beginAsync(msg.getTraceName(),
+                                     "durability", VoltTrace.Category.SPI,
+                                     MiscUtils.hsIdTxnIdToString(m_mailbox.getHSId(), msg.getSpHandle()),
                                      "txnId", TxnEgo.txnIdToString(msg.getTxnId()),
-                                     "partition", Integer.toString(m_partitionId));
+                                     "partition", Integer.toString(m_partitionId)));
             }
 
             ListenableFuture<Object> durabilityBackpressureFuture =
@@ -1019,15 +1022,15 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
                 if (task instanceof SpProcedureTask) {
                     final Iv2InitiateTaskMessage msg = (Iv2InitiateTaskMessage) task.getTransactionState().getNotice();
                     if (msg.getStoredProcedureInvocation().getTraceName() != null) {
-                        VoltTrace.endAsync(msg.getStoredProcedureInvocation().getTraceName(),
-                                           "durability", "spi",
-                                           MiscUtils.hsIdTxnIdToString(m_mailbox.getHSId(), msg.getSpHandle()));
+                        VoltTrace.add(() -> VoltTrace.endAsync(msg.getStoredProcedureInvocation().getTraceName(),
+                                           "durability", VoltTrace.Category.SPI,
+                                           MiscUtils.hsIdTxnIdToString(m_mailbox.getHSId(), msg.getSpHandle())));
                     }
                 } else if (task instanceof FragmentTask) {
                     if (((FragmentTask) task).m_fragmentMsg.getTraceName() != null) {
-                        VoltTrace.endAsync(((FragmentTask) task).m_fragmentMsg.getTraceName(),
-                                           "durability", "spi",
-                                           MiscUtils.hsIdTxnIdToString(m_mailbox.getHSId(), ((FragmentTask) task).m_fragmentMsg.getSpHandle()));
+                        VoltTrace.add(() -> VoltTrace.endAsync(((FragmentTask) task).m_fragmentMsg.getTraceName(),
+                                           "durability", VoltTrace.Category.SPI,
+                                           MiscUtils.hsIdTxnIdToString(m_mailbox.getHSId(), ((FragmentTask) task).m_fragmentMsg.getSpHandle())));
                     }
                 }
 
@@ -1072,13 +1075,14 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
             m_duplicateCounters.get(new DuplicateCounterKey(message.getTxnId(), message.getSpHandle()));
         if (counter != null) {
             if (txnState != null && ((FragmentTaskMessage) txnState.getNotice()).getTraceName() != null) {
-                String traceName = "recvFragment";
+                String traceName = "recvfragment";
                 if (message.m_sourceHSId != m_mailbox.getHSId()) {
-                    traceName = "replicateFragment";
+                    traceName = "replicatefragment";
                 }
-                VoltTrace.endAsync(((FragmentTaskMessage) txnState.getNotice()).getTraceName(),
-                                   traceName, "spi", traceId,
-                                   "status", Byte.toString(message.getStatusCode()));
+                String finalTraceName = traceName;
+                VoltTrace.add(() -> VoltTrace.endAsync(((FragmentTaskMessage) txnState.getNotice()).getTraceName(),
+                                                       finalTraceName, VoltTrace.Category.SPI, traceId,
+                                                       "status", Byte.toString(message.getStatusCode())));
             }
 
             int result = counter.offer(message);
@@ -1099,9 +1103,9 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
         }
 
         if (txnState != null && ((FragmentTaskMessage) txnState.getNotice()).getTraceName() != null) {
-            VoltTrace.endAsync(((FragmentTaskMessage) txnState.getNotice()).getTraceName(),
-                               "recvFragment", "spi", traceId,
-                               "status", Byte.toString(message.getStatusCode()));
+            VoltTrace.add(() -> VoltTrace.endAsync(((FragmentTaskMessage) txnState.getNotice()).getTraceName(),
+                               "recvfragment", VoltTrace.Category.SPI, traceId,
+                               "status", Byte.toString(message.getStatusCode())));
         }
 
         m_mailbox.send(message.getDestinationSiteId(), message);
@@ -1130,10 +1134,11 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
         {
             final FragmentTaskMessage frag = (FragmentTaskMessage) txn.getNotice();
             if (frag.getTraceName() != null) {
-                VoltTrace.instant(frag.getTraceName(), "recvCompleteTxn", "spi",
-                                  "txnId", TxnEgo.txnIdToString(msg.getTxnId()),
-                                  "partition", Integer.toString(m_partitionId),
-                                  "hsId", CoreUtils.hsIdToString(m_mailbox.getHSId()));
+                CompleteTransactionMessage finalMsg = msg;
+                VoltTrace.add(() -> VoltTrace.instant(frag.getTraceName(), "recvCompleteTxn", VoltTrace.Category.SPI,
+                                                      "txnId", TxnEgo.txnIdToString(finalMsg.getTxnId()),
+                                                      "partition", Integer.toString(m_partitionId),
+                                                      "hsId", CoreUtils.hsIdToString(m_mailbox.getHSId())));
             }
 
             Iv2Trace.logCompleteTransactionMessage(msg, m_mailbox.getHSId());

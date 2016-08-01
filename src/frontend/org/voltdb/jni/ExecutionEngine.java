@@ -382,11 +382,11 @@ public abstract class ExecutionEngine implements FastDeserializer.Deserializatio
     {
         if (m_traceFilename != null) {
             if (isBegin) {
-                VoltTrace.beginDuration(m_traceFilename, name, "ee",
-                                        "partition", Integer.toString(m_partitionId),
-                                        "info", args);
+                VoltTrace.add(() -> VoltTrace.beginDuration(m_traceFilename, name, VoltTrace.Category.EE,
+                                                            "partition", Integer.toString(m_partitionId),
+                                                            "info", args));
             } else {
-                VoltTrace.endDuration(m_traceFilename);
+                VoltTrace.add(() -> VoltTrace.endDuration(m_traceFilename));
             }
         }
     }
@@ -596,17 +596,18 @@ public abstract class ExecutionEngine implements FastDeserializer.Deserializatio
             m_traceFilename = traceFilename;
 
             if (m_traceFilename != null) {
-                VoltTrace.beginDuration(m_traceFilename, "execPlanFragment", "spsite",
+                final String finalFilename = m_traceFilename;
+                VoltTrace.add(() -> VoltTrace.beginDuration(finalFilename, "execplanfragment", VoltTrace.Category.SPSITE,
                                         "txnId", TxnEgo.txnIdToString(txnId),
-                                        "partition", Integer.toString(m_partitionId),
-                                        "sql", Arrays.toString(m_sqlTexts));
+                                        "partition", Integer.toString(m_partitionId)));
             }
 
             VoltTable[] results = coreExecutePlanFragments(numFragmentIds, planFragmentIds, inputDepIds,
                     parameterSets, txnId, spHandle, lastCommittedSpHandle, uniqueId, undoQuantumToken, m_traceFilename != null);
 
             if (m_traceFilename != null) {
-                VoltTrace.endDuration(m_traceFilename);
+                final String finalFilename = m_traceFilename;
+                VoltTrace.add(() -> VoltTrace.endDuration(finalFilename));
             }
 
             m_plannerStats.updateEECacheStats(m_eeCacheSize, numFragmentIds - m_cacheMisses,

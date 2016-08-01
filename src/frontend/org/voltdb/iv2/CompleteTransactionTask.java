@@ -51,9 +51,9 @@ public class CompleteTransactionTask extends TransactionTask
         hostLog.debug("STARTING: " + this);
         final FragmentTaskMessage frag = (FragmentTaskMessage) m_txnState.getNotice();
         if (frag.getTraceName() != null) {
-            VoltTrace.beginDuration(frag.getTraceName(), "execCompleteTxn", "spsite",
+            VoltTrace.add(() -> VoltTrace.beginDuration(frag.getTraceName(), "execcompletetxn", VoltTrace.Category.SPSITE,
                                     "txnId", TxnEgo.txnIdToString(getTxnId()),
-                                    "partition", Integer.toString(siteConnection.getCorrespondingPartitionId()));
+                                    "partition", Integer.toString(siteConnection.getCorrespondingPartitionId())));
         }
 
         if (!m_txnState.isReadOnly()) {
@@ -84,7 +84,7 @@ public class CompleteTransactionTask extends TransactionTask
         }
 
         if (frag.getTraceName() != null) {
-            VoltTrace.endDuration(frag.getTraceName());
+            VoltTrace.add(() -> VoltTrace.endDuration(frag.getTraceName()));
         }
     }
 
