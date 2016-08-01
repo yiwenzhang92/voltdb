@@ -20,6 +20,7 @@ package org.voltdb.iv2;
 import java.util.ArrayDeque;
 import java.util.Deque;
 
+import org.voltcore.logging.Level;
 import org.voltcore.logging.VoltLogger;
 import org.voltcore.messaging.Mailbox;
 import org.voltcore.messaging.VoltMessage;
@@ -66,13 +67,15 @@ public class BufferedReadLog
         }
     }
 
+    private static final int INIT_BUFFER_CAPACITY = 256;
+
     final Deque<Item> m_bufferedReadSp;
     Mailbox m_mailbox;
     int m_maxCount = -1;
 
     BufferedReadLog(Mailbox mailbox)
     {
-        m_bufferedReadSp = new ArrayDeque<Item>();
+        m_bufferedReadSp = new ArrayDeque<Item>(INIT_BUFFER_CAPACITY);
 
         assert(mailbox != null);
         m_mailbox = mailbox;
@@ -99,7 +102,7 @@ public class BufferedReadLog
 
         if (m_bufferedReadSp.size() > m_maxCount) {
             m_maxCount = m_bufferedReadSp.size();
-            hostLog.info("max buffered read log size: " + m_maxCount);
+            hostLog.rateLimitedLog(10, Level.INFO, null, "max buffered read log size: " + m_maxCount);
         }
     }
 
@@ -114,6 +117,8 @@ public class BufferedReadLog
                 // we know any previous write has been confirmed and it's safe to release.
                 m_mailbox.send(item.getResponseHSId(), item.getMessage());
                 deq.poll();
+            } else {
+                break;
             }
         }
     }
