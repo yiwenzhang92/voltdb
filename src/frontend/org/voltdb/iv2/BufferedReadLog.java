@@ -67,7 +67,7 @@ public class BufferedReadLog
         }
     }
 
-    private static final int INIT_BUFFER_CAPACITY = 256;
+    private static final int INIT_BUFFER_CAPACITY = 64;
 
     final Deque<Item> m_bufferedReadSp;
     Mailbox m_mailbox;
