@@ -165,6 +165,9 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
 
         // try to get the global default setting for read consistency, but fall back to SAFE
         m_defaultConsistencyReadLevel = VoltDB.Configuration.getDefaultReadConsistencyLevel();
+        if (m_defaultConsistencyReadLevel == ReadLevel.SAFE) {
+            m_bufferedReadLog = new BufferedReadLog();
+        }
     }
 
     @Override
@@ -696,7 +699,7 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
                 // InvocationDispatcher routes SAFE reads to SPI only
                 assert(m_isLeader);
                 assert(m_bufferedReadLog != null);
-                m_bufferedReadLog.offerSp(message, m_repairLogTruncationHandle);
+                m_bufferedReadLog.offer(m_mailbox, message, m_repairLogTruncationHandle);
                 return;
             }
         }
@@ -715,7 +718,7 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
                     // writes have been acked from its replicas, now it's safe to release reads.
                     assert(! message.isReadOnly());
                     assert(m_bufferedReadLog != null);
-                    m_bufferedReadLog.releaseBufferedRead(m_repairLogTruncationHandle);
+                    m_bufferedReadLog.releaseBufferedReads(m_mailbox, m_repairLogTruncationHandle);
                 }
             }
             else if (result == DuplicateCounter.MISMATCH) {
@@ -975,7 +978,7 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
                 if (m_defaultConsistencyReadLevel == ReadLevel.SAFE) {
                     // writes have been acked from its replicas, now it's safe to release reads.
                     assert(m_bufferedReadLog != null);
-                    m_bufferedReadLog.releaseBufferedRead(m_repairLogTruncationHandle);
+                    m_bufferedReadLog.releaseBufferedReads(m_mailbox, m_repairLogTruncationHandle);
                 }
             }
             else if (result == DuplicateCounter.MISMATCH) {
@@ -992,7 +995,7 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
                 assert(m_isLeader);
                 assert(m_bufferedReadLog != null);
                 if (m_defaultConsistencyReadLevel == ReadLevel.SAFE) {
-                    m_bufferedReadLog.offerSp(message, m_repairLogTruncationHandle);
+                    m_bufferedReadLog.offer(m_mailbox, message, m_repairLogTruncationHandle);
                     return;
                 }
             } else {
@@ -1209,12 +1212,11 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
         tmLog.info(String.format("%s: %s", CoreUtils.hsIdToString(m_mailbox.getHSId()), m_pendingTasks));
     }
 
-    public void setConsistentReadLevel(ReadLevel readLevel) {
+    public void setConsistentReadLevelForTestOnly(ReadLevel readLevel) {
         m_defaultConsistencyReadLevel = readLevel;
+        if (m_defaultConsistencyReadLevel == ReadLevel.SAFE) {
+            m_bufferedReadLog = new BufferedReadLog();
+        }
     }
 
-    @Override
-    public void setBufferedReadLog(BufferedReadLog bufferedReadLog) {
-        m_bufferedReadLog = bufferedReadLog;
-    }
 }

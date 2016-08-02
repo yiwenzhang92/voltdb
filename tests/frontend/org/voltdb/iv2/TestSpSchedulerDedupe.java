@@ -104,8 +104,7 @@ public class TestSpSchedulerDedupe extends TestCase
         dut.setCommandLog(cl);
         dut.setLock(mbox);
 
-        ((SpScheduler)dut).setConsistentReadLevel(m_readLevel);
-        ((SpScheduler)dut).setBufferedReadLog(new BufferedReadLog(mbox));
+        ((SpScheduler)dut).setConsistentReadLevelForTestOnly(m_readLevel);
     }
 
     private Iv2InitiateTaskMessage createMsg(long txnId, boolean readOnly,

@@ -154,7 +154,7 @@ public class AdmissionControlGroup implements org.voltcore.network.QueueMonitor
         checkAndLogInvariants();
         if (m_pendingTxnBytes > MAX_DESIRED_PENDING_BYTES || m_pendingTxnCount > MAX_DESIRED_PENDING_TXNS) {
             if (!m_hadBackPressure) {
-                hostLog.info("TXN back pressure began");
+                hostLog.debug("TXN back pressure began");
                 m_hadBackPressure = true;
                 for (ACGMember m : m_members) {
                     m.onBackpressure();
@@ -217,7 +217,7 @@ public class AdmissionControlGroup implements org.voltcore.network.QueueMonitor
             (m_pendingTxnCount < LESS_THAN_MAX_DESIRED_PENDING_TXNS))
         {
             if (m_hadBackPressure) {
-                hostLog.info("TXN backpressure ended");
+                hostLog.debug("TXN backpressure ended");
                 m_hadBackPressure = false;
                 for (ACGMember m : m_members) {
                     m.offBackpressure();

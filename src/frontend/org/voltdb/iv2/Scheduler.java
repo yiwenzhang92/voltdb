@@ -208,10 +208,6 @@ abstract public class Scheduler implements InitiatorMessageHandler
         }
     }
 
-    public void setBufferedReadLog(BufferedReadLog bufferedReadLog) {
-
-    }
-
     // Dumps the content of the scheduler for debugging
     public void dump() {}
 
