@@ -59,6 +59,7 @@ import org.voltdb.messaging.InitiateResponseMessage;
 import org.voltdb.messaging.Iv2InitiateTaskMessage;
 import org.voltdb.messaging.Iv2LogFaultMessage;
 import org.voltdb.messaging.MultiPartitionParticipantMessage;
+import org.voltdb.messaging.RepairLogTruncationMessage;
 
 import com.google_voltpatches.common.primitives.Ints;
 import com.google_voltpatches.common.primitives.Longs;
@@ -154,6 +155,9 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
     private final DurabilityListener m_durabilityListener;
     // Generator of pre-IV2ish timestamp based unique IDs
     private final UniqueIdGenerator m_uniqueIdGenerator;
+
+    // the truncation handle last sent to the replicas
+    long m_lastSentTruncationHandle = Long.MIN_VALUE;
 
     SpScheduler(int partitionId, SiteTaskerQueue taskQueue, SnapshotCompletionMonitor snapMonitor)
     {
@@ -482,7 +486,7 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
             msg = new Iv2InitiateTaskMessage(
                     message.getInitiatorHSId(),
                     message.getCoordinatorHSId(),
-                    m_repairLogTruncationHandle,
+                    getRepairLogTruncationHandleForReplicas(),
                     message.getTxnId(),
                     message.getUniqueId(),
                     message.isReadOnly(),
@@ -510,7 +514,7 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
                 Iv2InitiateTaskMessage replmsg =
                     new Iv2InitiateTaskMessage(m_mailbox.getHSId(),
                             m_mailbox.getHSId(),
-                            m_repairLogTruncationHandle,
+                            getRepairLogTruncationHandleForReplicas(),
                             msg.getTxnId(),
                             msg.getUniqueId(),
                             msg.isReadOnly(),
@@ -711,7 +715,7 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
             int result = counter.offer(message);
             if (result == DuplicateCounter.DONE) {
                 m_duplicateCounters.remove(dcKey);
-                m_repairLogTruncationHandle = spHandle;
+                setRepairLogTruncationHandle(spHandle);
                 m_mailbox.send(counter.m_destinationId, counter.getLastResponse());
 
                 if (m_defaultConsistencyReadLevel == ReadLevel.SAFE) {
@@ -728,7 +732,7 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
         else {
             // the initiatorHSId is the ClientInterface mailbox.
             // this will be on SPI without k-safety or replica only with k-safety
-            m_repairLogTruncationHandle = spHandle;
+            setRepairLogTruncationHandle(spHandle);
             m_mailbox.send(message.getInitiatorHSId(), message);
         }
     }
@@ -967,8 +971,12 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
         if (counter != null) {
             int result = counter.offer(message);
             if (result == DuplicateCounter.DONE) {
+                final TransactionState txn = m_outstandingTxns.get(message.getTxnId());
+                if (txn != null && txn.isDone()) {
+                    setRepairLogTruncationHandle(message.getSpHandle());
+                }
+
                 m_duplicateCounters.remove(new DuplicateCounterKey(message.getTxnId(), message.getSpHandle()));
-                m_repairLogTruncationHandle = message.getSpHandle();
                 FragmentResponseMessage resp = (FragmentResponseMessage)counter.getLastResponse();
                 // MPI is tracking deps per partition HSID.  We need to make
                 // sure we write ours into the message getting sent to the MPI
@@ -1039,6 +1047,28 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
             // If this is a restart, then we need to leave the transaction state around
             if (!msg.isRestart()) {
                 m_outstandingTxns.remove(msg.getTxnId());
+                // Set the truncation handle here instead of when processing
+                // FragmentResponseMessage to avoid letting replicas think a
+                // fragment is done before the MP txn is fully committed.
+                //
+                // We have to use the spHandle from the fragment, not from the
+                // current CompleteTransactionMessage because it hasn't been
+                // executed yet. If we use the spHandle from the current
+                // completion message, it may be advancing the truncation handle
+                // before previous SPs are finished. This could happen when the
+                // MP we are completing is either a one-shot read MP or it
+                // didn't send any fragment to this partition.
+                //
+                // It is also possible to receive a CompleteTransactionMessage
+                // before the fragment runs, e.g. an early abort could happen if
+                // another partition failed its fragment before this partition
+                // even starts running the fragment. In this case, we don't want
+                // to update the truncation handle until after we run the
+                // fragment. Checking the doneness of the transaction state
+                // achieves this.
+                if (m_isLeader && txn.isDone()) {
+                    setRepairLogTruncationHandle(txn.m_spHandle);
+                }
             }
         }
     }
@@ -1219,4 +1249,52 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
         }
     }
 
+    private long getRepairLogTruncationHandleForReplicas()
+    {
+        m_lastSentTruncationHandle = m_repairLogTruncationHandle;
+        return m_repairLogTruncationHandle;
+    }
+
+    private void setRepairLogTruncationHandle(long newHandle)
+    {
+        assert newHandle >= m_repairLogTruncationHandle;
+        m_repairLogTruncationHandle = newHandle;
+        scheduleRepairLogTruncateMsg();
+    }
+
+    /**
+     * Schedules a task to be run on the site to send the latest truncation
+     * handle to the replicas. This should be called whenever the local
+     * truncation handle advances on the leader to guarantee that the replicas
+     * will hear about the new handle in case there is no more transactions to
+     * carry the information over.
+     *
+     * The truncation handle is not sent immediately when this method is called
+     * to avoid sending a message for every committed transaction. In most cases
+     * when there is sufficient load on the system, there will always be a new
+     * transaction that this information can piggy-back on. In that case, by the
+     * time this task runs on the site, the last sent truncation handle has
+     * already advanced, so there is no need to send the message. This has the
+     * benefit of sending more truncation messages when the throughput is low,
+     * which makes the replicas see committed transactions faster.
+     */
+    private void scheduleRepairLogTruncateMsg()
+    {
+        if (m_sendToHSIds.length == 0) {
+            return;
+        }
+
+        m_tasks.offer(new SiteTaskerRunnable() {
+            @Override
+            void run()
+            {
+                synchronized (m_lock) {
+                    if (m_lastSentTruncationHandle < m_repairLogTruncationHandle) {
+                        m_lastSentTruncationHandle = m_repairLogTruncationHandle;
+                        m_mailbox.send(m_sendToHSIds, new RepairLogTruncationMessage(m_repairLogTruncationHandle));
+                    }
+                }
+            }
+        });
+    }
 }
