@@ -717,13 +717,6 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
                 m_duplicateCounters.remove(dcKey);
                 setRepairLogTruncationHandle(spHandle);
                 m_mailbox.send(counter.m_destinationId, counter.getLastResponse());
-
-                if (m_defaultConsistencyReadLevel == ReadLevel.SAFE) {
-                    // writes have been acked from its replicas, now it's safe to release reads.
-                    assert(! message.isReadOnly());
-                    assert(m_bufferedReadLog != null);
-                    m_bufferedReadLog.releaseBufferedReads(m_mailbox, m_repairLogTruncationHandle);
-                }
             }
             else if (result == DuplicateCounter.MISMATCH) {
                 VoltDB.crashGlobalVoltDB("HASH MISMATCH: replicas produced different results.", true, null);
@@ -982,12 +975,6 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
                 // sure we write ours into the message getting sent to the MPI
                 resp.setExecutorSiteId(m_mailbox.getHSId());
                 m_mailbox.send(counter.m_destinationId, resp);
-
-                if (m_defaultConsistencyReadLevel == ReadLevel.SAFE) {
-                    // writes have been acked from its replicas, now it's safe to release reads.
-                    assert(m_bufferedReadLog != null);
-                    m_bufferedReadLog.releaseBufferedReads(m_mailbox, m_repairLogTruncationHandle);
-                }
             }
             else if (result == DuplicateCounter.MISMATCH) {
                 VoltDB.crashGlobalVoltDB("HASH MISMATCH running multi-part procedure.", true, null);
@@ -1009,7 +996,7 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
             } else {
                 // writes may update the truncation handle
                 if (m_isLeader && message.getSpHandle() > m_repairLogTruncationHandle) {
-                    m_repairLogTruncationHandle = message.getSpHandle();
+                    setRepairLogTruncationHandle(message.getSpHandle());
                 }
             }
         }
@@ -1259,6 +1246,13 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
     {
         assert newHandle >= m_repairLogTruncationHandle;
         m_repairLogTruncationHandle = newHandle;
+
+        if (m_defaultConsistencyReadLevel == ReadLevel.SAFE) {
+            // writes have been acked from its replicas, now it's safe to release reads.
+            assert(m_bufferedReadLog != null);
+            m_bufferedReadLog.releaseBufferedReads(m_mailbox, m_repairLogTruncationHandle);
+        }
+
         scheduleRepairLogTruncateMsg();
     }
 
