@@ -168,8 +168,10 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
         m_uniqueIdGenerator = new UniqueIdGenerator(partitionId, 0);
 
         // try to get the global default setting for read consistency, but fall back to SAFE
+        tmLog.debug("SpScheduler construnctor");
         m_defaultConsistencyReadLevel = VoltDB.Configuration.getDefaultReadConsistencyLevel();
         if (m_defaultConsistencyReadLevel == ReadLevel.SAFE) {
+            tmLog.debug("SpScheduler construnctor: new BufferedReadLog");
             m_bufferedReadLog = new BufferedReadLog();
         }
     }
@@ -185,6 +187,7 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
     public void setMaxSeenTxnId(long maxSeenTxnId)
     {
         super.setMaxSeenTxnId(maxSeenTxnId);
+        tmLog.debug("SpScheduler:setMaxSeenTxnId: " + maxSeenTxnId + ", truncation point:" + m_repairLogTruncationHandle);
         writeIv2ViableReplayEntry();
     }
 
@@ -371,6 +374,7 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
     @Override
     public void deliver(VoltMessage message)
     {
+        tmLog.debug("SpScheduler:Deliver: " + message.toString());
         if (message instanceof Iv2InitiateTaskMessage) {
             handleIv2InitiateTaskMessage((Iv2InitiateTaskMessage)message);
         }
@@ -717,6 +721,8 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
                 m_duplicateCounters.remove(dcKey);
                 setRepairLogTruncationHandle(spHandle);
                 m_mailbox.send(counter.m_destinationId, counter.getLastResponse());
+
+                releaseBufferedReads();
             }
             else if (result == DuplicateCounter.MISMATCH) {
                 VoltDB.crashGlobalVoltDB("HASH MISMATCH: replicas produced different results.", true, null);
@@ -725,6 +731,7 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
         else {
             // the initiatorHSId is the ClientInterface mailbox.
             // this will be on SPI without k-safety or replica only with k-safety
+            assert(!message.isReadOnly());
             setRepairLogTruncationHandle(spHandle);
             m_mailbox.send(message.getInitiatorHSId(), message);
         }
@@ -967,6 +974,8 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
                 final TransactionState txn = m_outstandingTxns.get(message.getTxnId());
                 if (txn != null && txn.isDone()) {
                     setRepairLogTruncationHandle(message.getSpHandle());
+                    // not read message
+                    releaseBufferedReads();
                 }
 
                 m_duplicateCounters.remove(new DuplicateCounterKey(message.getTxnId(), message.getSpHandle()));
@@ -983,24 +992,24 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
             return;
         }
 
-        TransactionState txn = m_outstandingTxns.get(message.getTxnId());
-        if (txn != null) {
-            if (txn.isReadOnly()) {
-                // FragmentResponse on SPI if without k-safety, or on replica with k-safety
-                assert(m_isLeader);
-                assert(m_bufferedReadLog != null);
-                if (m_defaultConsistencyReadLevel == ReadLevel.SAFE) {
-                    m_bufferedReadLog.offer(m_mailbox, message, m_repairLogTruncationHandle);
-                    return;
-                }
-            } else {
-                // writes may update the truncation handle
-                if (m_isLeader && message.getSpHandle() > m_repairLogTruncationHandle) {
-                    setRepairLogTruncationHandle(message.getSpHandle());
-                }
-            }
+        if (m_isLeader) {
+             TransactionState txn = m_outstandingTxns.get(message.getTxnId());
+             if (txn != null) {
+                 if (txn.isReadOnly()) {
+                     // FragmentResponse on SPI if without k-safety, or on replica with k-safety
+                     assert(m_bufferedReadLog != null);
+                     if (m_defaultConsistencyReadLevel == ReadLevel.SAFE) {
+                         m_bufferedReadLog.offer(m_mailbox, message, m_repairLogTruncationHandle);
+                         return;
+                     }
+                 } else {
+                     // writes may update the truncation handle
+                     if (message.getSpHandle() > m_repairLogTruncationHandle) {
+                         setRepairLogTruncationHandle(message.getSpHandle());
+                     }
+                 }
+             }
         }
-
         m_mailbox.send(message.getDestinationSiteId(), message);
     }
 
@@ -1053,8 +1062,10 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
                 // to update the truncation handle until after we run the
                 // fragment. Checking the doneness of the transaction state
                 // achieves this.
-                if (m_isLeader && txn.isDone()) {
+                if (m_isLeader && txn.isDone() && !txn.isReadOnly()) {
                     setRepairLogTruncationHandle(txn.m_spHandle);
+
+                    releaseBufferedReads();
                 }
             }
         }
@@ -1246,14 +1257,13 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
     {
         assert newHandle >= m_repairLogTruncationHandle;
         m_repairLogTruncationHandle = newHandle;
+        scheduleRepairLogTruncateMsg();
+    }
 
+    private void releaseBufferedReads() {
         if (m_defaultConsistencyReadLevel == ReadLevel.SAFE) {
-            // writes have been acked from its replicas, now it's safe to release reads.
-            assert(m_bufferedReadLog != null);
             m_bufferedReadLog.releaseBufferedReads(m_mailbox, m_repairLogTruncationHandle);
         }
-
-        scheduleRepairLogTruncateMsg();
     }
 
     /**

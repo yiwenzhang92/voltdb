@@ -61,6 +61,14 @@ public class BufferedReadLog
             }
             return m_fragmentMsg;
         }
+
+        @Override
+        public String toString() {
+            if (m_initiateMsg != null) {
+                return "Item: Init";
+            }
+            return "Item: Frag";
+        }
     }
 
     private static final int INIT_BUFFER_CAPACITY = 64;
@@ -95,6 +103,7 @@ public class BufferedReadLog
 
     public void releaseBufferedReads(Mailbox mailbox, long spHandle)
     {
+
         Deque<Item> deq = m_bufferedReads;
         Item item = null;
         while ((item = deq.peek()) != null) {
