@@ -188,8 +188,6 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
     public void setMaxSeenTxnId(long maxSeenTxnId)
     {
         super.setMaxSeenTxnId(maxSeenTxnId);
-        tmLog.debug("SpScheduler:setMaxSeenTxnId: " + maxSeenTxnId + ", truncation point:" + m_repairLogTruncationHandle);
-        m_repairLogTruncationHandle = maxSeenTxnId;
         writeIv2ViableReplayEntry();
     }
 
@@ -975,8 +973,6 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
                 final TransactionState txn = m_outstandingTxns.get(message.getTxnId());
                 if (txn != null && txn.isDone()) {
                     setRepairLogTruncationHandle(message.getSpHandle());
-                    // not read message
-                    releaseBufferedReads();
                 }
 
                 m_duplicateCounters.remove(new DuplicateCounterKey(message.getTxnId(), message.getSpHandle()));
@@ -1065,8 +1061,6 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
                 // achieves this.
                 if (m_isLeader && txn.isDone() && !txn.isReadOnly()) {
                     setRepairLogTruncationHandle(txn.m_spHandle);
-
-                    releaseBufferedReads();
                 }
             }
         }
@@ -1256,9 +1250,11 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
 
     private void setRepairLogTruncationHandle(long newHandle)
     {
-        assert newHandle >= m_repairLogTruncationHandle;
+        assert newHandle >= m_repairLogTruncationHandle : "new handle: " + newHandle + ", repairLog:" + m_repairLogTruncationHandle;
         m_repairLogTruncationHandle = newHandle;
         scheduleRepairLogTruncateMsg();
+
+        releaseBufferedReads();
     }
 
     private void releaseBufferedReads() {
