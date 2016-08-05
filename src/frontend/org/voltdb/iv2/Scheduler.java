@@ -102,17 +102,11 @@ abstract public class Scheduler implements InitiatorMessageHandler
      */
     protected Object m_lock;
 
-    // the current not-needed-any-more point of the repair log.
-    long m_repairLogTruncationHandle;
-
     Scheduler(int partitionId, SiteTaskerQueue taskQueue)
     {
         m_tasks = taskQueue;
         m_partitionId = partitionId;
         m_txnEgo = TxnEgo.makeZero(partitionId);
-
-        // initialize the initial truncation point to be the starting transaction id.
-        m_repairLogTruncationHandle = getCurrentTxnId();
     }
 
     public void setMaxSeenTxnId(long maxSeenTxnId)
@@ -126,8 +120,6 @@ abstract public class Scheduler implements InitiatorMessageHandler
         if (m_txnEgo.getTxnId() < ego.getTxnId()) {
             m_txnEgo = ego;
         }
-
-        m_repairLogTruncationHandle = getCurrentTxnId();
     }
 
     final protected TxnEgo advanceTxnEgo()

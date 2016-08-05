@@ -156,6 +156,8 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
     // Generator of pre-IV2ish timestamp based unique IDs
     private final UniqueIdGenerator m_uniqueIdGenerator;
 
+    // the current not-needed-any-more point of the repair log.
+    long m_repairLogTruncationHandle = Long.MIN_VALUE;
     // the truncation handle last sent to the replicas
     long m_lastSentTruncationHandle = Long.MIN_VALUE;
 
@@ -168,12 +170,11 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
         m_uniqueIdGenerator = new UniqueIdGenerator(partitionId, 0);
 
         // try to get the global default setting for read consistency, but fall back to SAFE
-        tmLog.debug("SpScheduler construnctor");
         m_defaultConsistencyReadLevel = VoltDB.Configuration.getDefaultReadConsistencyLevel();
         if (m_defaultConsistencyReadLevel == ReadLevel.SAFE) {
-            tmLog.debug("SpScheduler construnctor: new BufferedReadLog");
             m_bufferedReadLog = new BufferedReadLog();
         }
+        m_repairLogTruncationHandle = getCurrentTxnId();
     }
 
     @Override
@@ -188,6 +189,7 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
     {
         super.setMaxSeenTxnId(maxSeenTxnId);
         tmLog.debug("SpScheduler:setMaxSeenTxnId: " + maxSeenTxnId + ", truncation point:" + m_repairLogTruncationHandle);
+        m_repairLogTruncationHandle = maxSeenTxnId;
         writeIv2ViableReplayEntry();
     }
 
@@ -374,7 +376,6 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
     @Override
     public void deliver(VoltMessage message)
     {
-        tmLog.debug("SpScheduler:Deliver: " + message.toString());
         if (message instanceof Iv2InitiateTaskMessage) {
             handleIv2InitiateTaskMessage((Iv2InitiateTaskMessage)message);
         }

@@ -73,6 +73,8 @@ public class MpScheduler extends Scheduler
     private final UniqueIdGenerator m_uniqueIdGenerator;
     final private MpTransactionTaskQueue m_pendingTasks;
 
+    // the current not-needed-any-more point of the repair log.
+    long m_repairLogTruncationHandle = Long.MIN_VALUE;
     // We need to lag the current MP execution point by at least two committed TXN ids
     // since that's the first point we can be sure is safely agreed on by all nodes.
     // Let the one we can't be sure about linger here.  See ENG-4211 for more.

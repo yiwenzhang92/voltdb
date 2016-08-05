@@ -130,6 +130,7 @@ public class TestSpSchedulerDedupe extends TestCase
                                        false); // isForReplay
         // sp: sphandle == txnid
         task.setTxnId(txnId);
+        task.setSpHandle(txnId);
         return task;
     }
 
