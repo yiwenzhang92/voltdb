@@ -78,9 +78,26 @@ public:
         : AbstractExecutor(engine, abstractNode)
         , m_projector()
         , m_searchKeyBackingStore(NULL)
+		, m_highVolume(false)
+		, m_limit(1)
         , m_aggExec(NULL)
     {}
     ~IndexScanExecutor();
+
+    inline bool getNextTupleInScan(IndexLookupType lookupType,
+            TableTuple* tuple,
+            TableIndex* index,
+            IndexCursor* cursor,
+            int activeNumOfSearchKeys) {
+    	if (m_highVolume) {
+    		// read from CoW
+    		PersistentTable* targetTable = static_cast<PersistentTable*>(m_node->getTargetTable());
+            return targetTable->advanceCOWIterator(*tuple);
+    	}
+    	else {
+    		return getNextTuple(lookupType, tuple, index, cursor, activeNumOfSearchKeys);
+    	}
+    }
 
     /** This is a helper function to get the "next tuple" during an
      *   index scan, called by p_execute of both this class and
@@ -90,6 +107,7 @@ public:
                                     TableIndex* index,
                                     IndexCursor* cursor,
                                     int activeNumOfSearchKeys) {
+
         if (lookupType == INDEX_LOOKUP_TYPE_EQ
             || lookupType == INDEX_LOOKUP_TYPE_GEO_CONTAINS) {
             *tuple = index->nextValueAtKey(*cursor);
@@ -111,8 +129,8 @@ private:
     bool p_init(AbstractPlanNode*,
                 TempTableLimits* limits);
     bool p_execute(const NValueArray &params);
+    virtual bool p_isSuspendable() {return m_highVolume;}
     void outputTuple(CountingPostfilter& postfilter, TableTuple& tuple);
-
 
     // Data in this class is arranged roughly in the order it is read for
     // p_execute(). Please don't reshuffle it only in the name of beauty.
@@ -139,6 +157,9 @@ private:
     boost::shared_array<AbstractExpression*> m_searchKeyArrayPtr;
     // So Valgrind doesn't complain:
     char* m_searchKeyBackingStore;
+
+    bool m_highVolume;
+    int m_limit;
 
     AggregateExecutorBase* m_aggExec;
 };

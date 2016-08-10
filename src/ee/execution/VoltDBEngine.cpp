@@ -1654,7 +1654,8 @@ void VoltDBEngine::updateExecutorContextUndoQuantumForTest()
 
 bool VoltDBEngine::activateCopyOnWriteContext(
         const CatalogId tableId,
-        const TableStreamType cowType) {
+        const TableStreamType cowType,
+		ReferenceSerializeInputBE &serializeIn) {
     Table* found = getTable(tableId);
     if (! found) {
         return false;
@@ -1667,7 +1668,8 @@ bool VoltDBEngine::activateCopyOnWriteContext(
     }
 
     // Crank up the necessary persistent table streaming mechanism(s).
-    if (!table->activateCopyOnWriteContext(cowType, m_partitionId, tableId)) {
+    std::string indexName = serializeIn.readTextString();
+    if (!table->activateCopyOnWriteContext(cowType, m_partitionId, tableId, indexName)) {
         return false;
     }
 

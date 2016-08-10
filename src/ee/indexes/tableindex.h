@@ -338,6 +338,18 @@ public:
 
     /**
      * sets the tuple to point the entry found by
+     * moveToKeyOrGreater().
+     *
+     * @return true if any entry to return, false if reached the end
+     * of this index.
+     */
+    virtual TableTuple currentValue(IndexCursor& cursor) const
+    {
+        throwFatalException("Invoked TableIndex virtual method nextValue which has no implementation");
+    };
+
+    /**
+     * sets the tuple to point the entry found by
      * moveToKeyOrGreater().  calls this repeatedly to get all entries
      * with or following to the search key.
      *

@@ -1269,7 +1269,8 @@ template void PersistentTable::processLoadedTupleShared <FallbackSerializeOutput
 bool PersistentTable::activateCopyOnWriteContext(
     TableStreamType cowType,
     int32_t partitionId,
-    CatalogId tableId) {
+    CatalogId tableId,
+	std::string indexName) {
     /*
      * Allow multiple stream types for the same partition by holding onto the
      * TableStreamer object. TableStreamer enforces which multiple stream type
@@ -1417,6 +1418,9 @@ void PersistentTable::notifyBlockWasCompactedAway(TBPtr block) {
         assert(m_blocksPendingSnapshot.find(block) != m_blocksPendingSnapshot.end());
         if (m_tableStreamer != NULL) {
             m_tableStreamer->notifyBlockWasCompactedAway(block);
+        }
+        if (m_copyOnWriteContext != NULL) {
+            m_copyOnWriteContext->notifyBlockWasCompactedAway(block);
         }
         return;
     }

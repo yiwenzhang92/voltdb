@@ -226,7 +226,7 @@ public class MpRoSite implements Runnable, SiteProcedureConnection
         }
 
         @Override
-        public boolean activateCopyOnWriteContext(int tableId, TableStreamType type)
+        public boolean activateCopyOnWriteContext(int tableId, byte[] indexName, CopyOnWriteType type)
         {
             throw new RuntimeException("RO MP Site doesn't do this, shouldn't be here.");
         }

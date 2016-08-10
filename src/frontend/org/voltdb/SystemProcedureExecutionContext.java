@@ -80,7 +80,7 @@ public interface SystemProcedureExecutionContext {
      */
     public void updateHashinator(TheHashinator hashinator);
 
-    boolean activateCopyOnWriteContext(int tableId, TableStreamType type);
+    boolean activateCopyOnWriteContext(int tableId, byte[] indexName, TableStreamType type);
 
     boolean activateTableStream(int tableId, TableStreamType type, boolean undo, byte[] predicates);
 

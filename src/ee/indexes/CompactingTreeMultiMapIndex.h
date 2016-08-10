@@ -233,6 +233,18 @@ class CompactingTreeMultiMapIndex : public TableIndex
             mapIter = m_entries.rbegin();
     }
 
+    TableTuple currentValue(IndexCursor& cursor) const
+    {
+        TableTuple retval(getTupleSchema());
+        MapIterator &mapIter = castToIter(cursor);
+
+        if (! mapIter.isEnd()) {
+            retval.move(const_cast<void*>(mapIter.value()));
+        }
+
+        return retval;
+    }
+
     TableTuple nextValue(IndexCursor& cursor) const
     {
         TableTuple retval(getTupleSchema());

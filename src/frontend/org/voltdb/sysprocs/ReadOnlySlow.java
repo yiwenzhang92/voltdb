@@ -183,7 +183,16 @@ public class ReadOnlySlow extends VoltSystemProcedure {
             JSONArray planNodes = obj.getJSONArray("PLAN_NODES");
             for (int i = 0; i < planNodes.length(); i++) {
                 JSONObject planNode = planNodes.getJSONObject(i);
-                if (((String) planNode.getString("PLAN_NODE_TYPE")).equals("SEQSCAN")
+                if (((String) planNode.getString("PLAN_NODE_TYPE")).equals("INDEXSCAN")
+                        && planNode.has("SUSPENDABLE") && planNode.getBoolean("SUSPENDABLE")) {
+                    String indexName = planNode.getString("TARGET_INDEX_NAME");
+                    pauseableIndexNames.add(indexName);
+                    String tableName = planNode.getString("TARGET_TABLE_NAME");
+                    pauseableTableNames.add(tableName);
+                    int tableId = CatalogUtil.getTableIdFromName(ctx.getDatabase(),tableName);
+                    ctx.activateCopyOnWriteContext(tableId, indexName.getBytes(), TableStreamType.COPY_ON_WRITE_INDEX);
+                }
+                else if (((String) planNode.getString("PLAN_NODE_TYPE")).equals("SEQSCAN")
                         && planNode.has("SUSPENDABLE") && planNode.getBoolean("SUSPENDABLE")) {
                     String name = planNode.getString("TARGET_TABLE_NAME");
                     int tableId = CatalogUtil.getTableIdFromName(ctx.getDatabase(),name);

@@ -1216,11 +1216,15 @@ void VoltDBIPC::getStats(struct ipc_command *cmd) {
 int8_t VoltDBIPC::activateCopyOnWriteContext(struct ipc_command *cmd) {
     activate_copyonwrite *activateCommand = (activate_copyonwrite*) cmd;
     const voltdb::CatalogId tableId = ntohl(activateCommand->tableId);
+    // Provide access to the serialized message data, i.e. the index name.
+    void* offset = activateCopyOnWriteContext->indexName;
+    int sz = static_cast<int> (ntohl(cmd->msgsize) - sizeof(activate_copyonwrite));
+    ReferenceSerializeInputBE serialize_in(offset, sz);
     const voltdb::TableStreamType cowType =
             static_cast<voltdb::TableStreamType>(ntohl(activateCommand->cowType));
 
     try {
-        if (m_engine->activateCopyOnWriteContext(tableId, cowType)) {
+        if (m_engine->activateCopyOnWriteContext(tableId, cowType, serialize_in)) {
             return kErrorCode_Success;
         } else {
             return kErrorCode_Error;

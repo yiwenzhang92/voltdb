@@ -141,6 +141,10 @@ bool IndexScanExecutor::p_init(AbstractPlanNode *abstractNode,
     m_lookupType = m_node->getLookupType();
     m_sortDirection = m_node->getSortDirection();
 
+    // Determine whether this is suspendable
+    m_highVolume = m_node->isPauseable();
+    m_limit = m_node->getLimit();
+
     VOLT_DEBUG("IndexScan: %s.%s\n", targetTable->name().c_str(), tableIndex->getName().c_str());
 
     return true;
@@ -168,6 +172,20 @@ bool IndexScanExecutor::p_execute(const NValueArray &params)
     int activeNumOfSearchKeys = m_numOfSearchkeys;
     IndexLookupType localLookupType = m_lookupType;
     SortDirectionType localSortDirection = m_sortDirection;
+
+    // XXX For suspendable, do we need to change any of this pre-lookup code?
+    if (m_highVolume) {
+        if (m_lookupType == INDEX_LOOKUP_TYPE_EQ
+            || m_lookupType == INDEX_LOOKUP_TYPE_GEO_CONTAINS) {
+        	targetTable->m_copyOnWriteContext->adjustCursors(0);
+        }
+
+        if ((m_lookupType != INDEX_LOOKUP_TYPE_EQ
+             && m_lookupType != INDEX_LOOKUP_TYPE_GEO_CONTAINS)
+            || activeNumOfSearchKeys == 0) {
+        	targetTable->m_copyOnWriteContext->adjustCursors(1);
+        }
+    }
 
     //
     // INLINE LIMIT
@@ -426,7 +444,7 @@ bool IndexScanExecutor::p_execute(const NValueArray &params)
     // We have to different nextValue() methods for different lookup types
     //
     while (postfilter.isUnderLimit() &&
-           getNextTuple(localLookupType,
+           getNextTupleInScan(localLookupType,
                         &tuple,
                         tableIndex,
                         &indexCursor,

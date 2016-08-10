@@ -443,6 +443,7 @@ public class QueryPlanner {
                 bestPlan.setHighVolume(true);
                 sendNode.setHighVolume(true);
                 makeLeafSeqScansSuspendable(bestPlan.rootPlanGraph);
+                makeLeafIndexScansSuspendable(bestPlan.rootPlanGraph);
             }
             // connect the nodes to build the graph
             sendNode.addAndLinkChild(bestPlan.rootPlanGraph);
@@ -509,6 +510,15 @@ public class QueryPlanner {
 
     public static void makeLeafSeqScansSuspendable(AbstractPlanNode root) {
         ArrayList<AbstractPlanNode> scanNodes = root.findAllNodesOfType(PlanNodeType.SEQSCAN);
+        for (AbstractPlanNode node : scanNodes) {
+            if (node.getParentCount() == 0) {
+                ((SeqScanPlanNode)node).setPausable(true, m_cluster.getLongreadstuplecount());
+            }
+        }
+    }
+    
+    public static void makeLeafIndexScansSuspendable(AbstractPlanNode root) {
+        ArrayList<AbstractPlanNode> scanNodes = root.findAllNodesOfType(PlanNodeType.INDEXSCAN);
         for (AbstractPlanNode node : scanNodes) {
             if (node.getParentCount() == 0) {
                 ((SeqScanPlanNode)node).setPausable(true, m_cluster.getLongreadstuplecount());

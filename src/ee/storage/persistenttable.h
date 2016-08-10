@@ -387,7 +387,8 @@ public:
      */
     bool activateCopyOnWriteContext(TableStreamType cowType,
                         int32_t partitionId,
-                        CatalogId tableId);
+                        CatalogId tableId,
+						std::string indexName);
 
     void deactivateCopyOnWriteContext();
 
