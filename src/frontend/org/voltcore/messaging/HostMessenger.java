@@ -1060,6 +1060,42 @@ public class HostMessenger implements SocketJoiner.JoinHandler, InterfaceToMesse
         return hostGroups;
     }
 
+    /**
+     * Get the host groups based on which hosts are live.
+     */
+    public Map<Integer, String> getHostGroups() {
+        Map<Integer, String> hostGroups = Maps.newHashMap();
+        int expectedHosts = getLiveHostIds().size();
+
+        try {
+            final List<String> children = m_zk.getChildren(CoreZK.hosts, null);
+            final int numChildren = children.size();
+
+            for (String child : children) {
+                final HostInfo info = HostInfo.fromBytes(m_zk.getData(ZKUtil.joinZKPath(CoreZK.hosts, child), false, null));
+                // HostInfo ZK node name has the form "host#", hence the offset of 4 to skip the "host".
+                hostGroups.put(Integer.parseInt(child.substring(child.indexOf("host") + 4)), info.m_group);
+            }
+
+            /*
+             * If there are extra hosts that means too many Volt procs were started.
+             * Kill this node based on the assumption that we are the extra one. In most
+             * cases this is correct and fine and in the worst case the cluster will hang coming up
+             * because two or more hosts killed themselves
+             */
+            if ( numChildren > expectedHosts) {
+                org.voltdb.VoltDB.crashLocalVoltDB("Expected to find " + expectedHosts +
+                        " hosts in cluster at startup but found " + numChildren +
+                        ".  Terminating this host.", false, null);
+            }
+        } catch (Exception e) {
+            org.voltdb.VoltDB.crashLocalVoltDB("Error waiting for hosts to be ready", false, e);
+        }
+
+        assert hostGroups.size() == expectedHosts;
+        return hostGroups;
+    }
+
     public boolean isPaused() {
         return m_paused.get();
     }
