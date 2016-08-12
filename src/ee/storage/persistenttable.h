@@ -67,6 +67,7 @@
 #include "storage/TableStreamerInterface.h"
 #include "storage/RecoveryContext.h"
 #include "storage/ScanCopyOnWriteContext.h"
+#include "storage/IndexCopyOnWriteContext.h"
 #include "common/UndoQuantumReleaseInterest.h"
 #include "common/ThreadLocalPool.h"
 

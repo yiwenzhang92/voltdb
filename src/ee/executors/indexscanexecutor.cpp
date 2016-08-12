@@ -177,13 +177,13 @@ bool IndexScanExecutor::p_execute(const NValueArray &params)
     if (m_highVolume) {
         if (m_lookupType == INDEX_LOOKUP_TYPE_EQ
             || m_lookupType == INDEX_LOOKUP_TYPE_GEO_CONTAINS) {
-        	targetTable->m_copyOnWriteContext->adjustCursors(0);
+        	targetTable->adjustCursors(0);
         }
 
         if ((m_lookupType != INDEX_LOOKUP_TYPE_EQ
              && m_lookupType != INDEX_LOOKUP_TYPE_GEO_CONTAINS)
             || activeNumOfSearchKeys == 0) {
-        	targetTable->m_copyOnWriteContext->adjustCursors(1);
+        	targetTable->adjustCursors(1);
         }
     }
 
@@ -497,6 +497,22 @@ bool IndexScanExecutor::p_execute(const NValueArray &params)
     VOLT_DEBUG ("Index Scanned :\n %s", m_outputTable->debug().c_str());
     return true;
 }
+
+inline bool IndexScanExecutor::getNextTupleInScan(IndexLookupType lookupType,
+             TableTuple* tuple,
+             TableIndex* index,
+             IndexCursor* cursor,
+             int activeNumOfSearchKeys) {
+         if (m_highVolume) {
+             // read from CoW
+             PersistentTable* targetTable = static_cast<PersistentTable*>(m_node->getTargetTable());
+            return targetTable->advanceCOWIterator(*tuple);
+        }
+        else {
+            return getNextTuple(lookupType, tuple, index, cursor, activeNumOfSearchKeys);
+        }
+}
+
 
 void IndexScanExecutor::outputTuple(CountingPostfilter& postfilter, TableTuple& tuple) {
     if (m_aggExec != NULL) {

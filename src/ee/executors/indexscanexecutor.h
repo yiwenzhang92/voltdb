@@ -88,16 +88,7 @@ public:
             TableTuple* tuple,
             TableIndex* index,
             IndexCursor* cursor,
-            int activeNumOfSearchKeys) {
-    	if (m_highVolume) {
-    		// read from CoW
-    		PersistentTable* targetTable = static_cast<PersistentTable*>(m_node->getTargetTable());
-            return targetTable->advanceCOWIterator(*tuple);
-    	}
-    	else {
-    		return getNextTuple(lookupType, tuple, index, cursor, activeNumOfSearchKeys);
-    	}
-    }
+            int activeNumOfSearchKeys);
 
     /** This is a helper function to get the "next tuple" during an
      *   index scan, called by p_execute of both this class and
