@@ -736,6 +736,7 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
             // this will be on SPI without k-safety or replica only with k-safety
             assert(!message.isReadOnly());
             setRepairLogTruncationHandle(spHandle);
+
             m_mailbox.send(message.getInitiatorHSId(), message);
         }
     }
@@ -1038,8 +1039,7 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
         if (txn != null)
         {
             final boolean isSysproc = ((FragmentTaskMessage) txn.getNotice()).isSysProcTask();
-            boolean shortcutRead = msg.isReadOnly() && (m_defaultConsistencyReadLevel == ReadLevel.FAST);
-            if (m_sendToHSIds.length > 0 && !msg.isRestart() && (!shortcutRead || isSysproc)) {
+            if (m_sendToHSIds.length > 0 && !msg.isRestart() && (!msg.isReadOnly() || isSysproc)) {
                 DuplicateCounter counter;
                 counter = new DuplicateCounter(msg.getCoordinatorHSId(),
                                                msg.getTxnId(),
@@ -1057,45 +1057,39 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
 
     public void handleCompleteTransactionResponseMessage(CompleteTransactionResponseMessage msg)
     {
-        if (msg.isRestart()) {
-            // Don't mark txn done for restarts
-            return;
-        }
-
         TransactionState txn = m_outstandingTxns.get(msg.getTxnId());
-        if (txn == null) {
-            return;
-        }
-
         final DuplicateCounterKey duplicateCounterKey = new DuplicateCounterKey(msg.getTxnId(), msg.getSpHandle());
         DuplicateCounter counter = m_duplicateCounters.get(duplicateCounterKey);
-        boolean duplicateCounterDone = true;
+        boolean txnDone = true;
 
-
-
-        if (counter != null) {
-            duplicateCounterDone = counter.offer(msg) == DuplicateCounter.DONE;
+        if (msg.isRestart()) {
+            // Don't mark txn done for restarts
+            txnDone = false;
         }
 
-        if (m_isLeader && duplicateCounterDone) {
-            // Set the truncation handle here instead of when processing
-            // FragmentResponseMessage to avoid letting replicas think a
-            // fragment is done before the MP txn is fully committed.
-            //
-            // We have to use the spHandle from the fragment, not from the
-            // current CompleteTransactionMessage because it hasn't been
-            // executed yet. If we use the spHandle from the current
-            // completion message, it may be advancing the truncation handle
-            // before previous SPs are finished. This could happen when the
-            // MP we are completing is either a one-shot read MP or it
-            // didn't send any fragment to this partition.
-            assert txn.isDone();
+        if (counter != null) {
+            txnDone = counter.offer(msg) == DuplicateCounter.DONE;
+        }
+
+        if (txnDone) {
             m_outstandingTxns.remove(msg.getTxnId());
-            m_duplicateCounters.remove(duplicateCounterKey);
-            if (m_repairLogTruncationHandle < txn.m_spHandle) {
+
+            if (m_isLeader && txn != null && counter != null) {
+                // Set the truncation handle here instead of when processing
+                // FragmentResponseMessage to avoid letting replicas think a
+                // fragment is done before the MP txn is fully committed.
+                //
+                // We have to use the spHandle from the fragment, not from the
+                // current CompleteTransactionMessage because it hasn't been
+                // executed yet. If we use the spHandle from the current
+                // completion message, it may be advancing the truncation handle
+                // before previous SPs are finished. This could happen when the
+                // MP we are completing is either a one-shot read MP or it
+                // didn't send any fragment to this partition.
+                assert txn.isDone();
+                m_duplicateCounters.remove(duplicateCounterKey);
                 setRepairLogTruncationHandle(txn.m_spHandle);
             }
-
         }
 
         // The CompleteTransactionResponseMessage ends at the SPI. It is not
