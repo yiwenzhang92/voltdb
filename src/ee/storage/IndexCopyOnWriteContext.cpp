@@ -110,10 +110,17 @@ IndexCopyOnWriteContext::adjustCursors(int type) {
     		std::cout << "ham" << std::endl;
     	}
     	else {
+    		/*
         	std::cout << "hello" << std::endl;
     		m_index.moveToGreaterThanKey(&m_tuple, m_indexCursor);
     		std::cout << "world" << std::endl;
     		m_indexDeletes->moveToGreaterThanKey(&m_tuple, m_deletesCursor);
+    		std::cout << "done" << std::endl;
+    		*/
+        	std::cout << "hello" << std::endl;
+    		m_index.moveToKeyByTuple(&m_tuple, m_indexCursor);
+    		std::cout << "world" << std::endl;
+    		m_indexDeletes->moveToKeyByTuple(&m_tuple, m_deletesCursor);
     		std::cout << "done" << std::endl;
     	}
     }
@@ -161,7 +168,7 @@ bool IndexCopyOnWriteContext::advanceIterator(TableTuple &tuple) {
 			else {
 				deletesTuple = m_indexDeletes->nextValue(m_deletesCursor);
 			}
-			m_tuple = deletesTuple;
+			m_tuple = m_indexDeletes->currentValue(m_deletesCursor);
 
 			if (m_indexInserts->hasKey(&indexTuple)) {
 				std::cout << "found key in inserts" << std::endl;
@@ -184,7 +191,7 @@ bool IndexCopyOnWriteContext::advanceIterator(TableTuple &tuple) {
 			else {
 				indexTuple = m_index.nextValue(m_indexCursor);
 			}
-			m_tuple = indexTuple;
+			m_tuple = m_index.currentValue(m_indexCursor);
 			if (!indexTuple.isNullTuple()) {
 				std::cout << "advanceIterator index2 " << indexTuple.debugNoHeader() << std::endl;
 			}
