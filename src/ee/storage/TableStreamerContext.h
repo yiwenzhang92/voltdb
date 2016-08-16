@@ -98,6 +98,8 @@ public:
 
     virtual bool cleanupTuple(TableTuple &tuple, bool deleteTuple) {return false;}
 
+    virtual bool adjustCursors(int type) {return false;}
+
     /**
      * Optional tuple insert handler.
      */

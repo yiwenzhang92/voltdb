@@ -23,6 +23,9 @@
 #include "storage/TupleBlock.h"
 #include "common/Pool.hpp"
 #include "common/tabletuple.h"
+#include "storage/TableStreamer.h"
+#include "storage/TableStreamerContext.h"
+#include "indexes/tableindex.h"
 
 #include <boost/scoped_ptr.hpp>
 #include <boost/ptr_container/ptr_vector.hpp>
@@ -35,7 +38,11 @@ class PersistentTable;
 class TableIndex;
 class IndexCursor;
 
-class IndexCopyOnWriteContext {
+class IndexCopyOnWriteContext : public TableStreamerContext {
+
+    friend bool TableStreamer::activateStream(PersistentTableSurgeon&, TupleSerializer&,
+                                              TableStreamType, const std::vector<std::string>&,
+											  std::string indexName);
 public:
 
     /**
@@ -45,6 +52,7 @@ public:
     IndexCopyOnWriteContext(PersistentTable &table,
                        PersistentTableSurgeon &surgeon,
 					   TableIndex &index,
+					   int32_t partitionId,
                        int64_t totalTuples);
 
     virtual ~IndexCopyOnWriteContext();
@@ -61,43 +69,48 @@ public:
     /**
      * Activation handler.
      */
-    void handleActivation();
+    virtual ActivationReturnCode handleActivation(TableStreamType streamType);
+
+
+    virtual ActivationReturnCode handleReactivation(TableStreamType streamType) {
+        return ACTIVATION_SUCCEEDED;
+    }
 
     /**
      * Rediscover cursor positions
      */
-    void adjustCursors(int type);
+    virtual bool adjustCursors(int type);
 
     /**
      * Do surgery
      */
-    bool advanceIterator(TableTuple &tuple);
+    virtual bool advanceIterator(TableTuple &tuple);
 
-    bool cleanupTuple(TableTuple &tuple, bool deleteTuple);
+    virtual bool cleanupTuple(TableTuple &tuple, bool deleteTuple) {return true;}
 
-    bool cleanup();
+    virtual bool cleanup();
 
     void completePassIfDone(bool hasMore);
 
     /**
      * Optional block compaction handler.
      */
-    void notifyBlockWasCompactedAway(TBPtr block);
+    virtual void notifyBlockWasCompactedAway(TBPtr block);
 
     /**
      * Optional tuple insert handler.
      */
-    bool notifyTupleInsert(TableTuple &tuple);
+    virtual bool notifyTupleInsert(TableTuple &tuple);
 
     /**
      * Optional tuple update handler.
      */
-    bool notifyTupleUpdate(TableTuple &tuple);
+    virtual bool notifyTupleUpdate(TableTuple &tuple);
 
     /**
      * Optional tuple delete handler.
      */
-    bool notifyTupleDelete(TableTuple &tuple);
+    virtual bool notifyTupleDelete(TableTuple &tuple);
 
     bool isTableIndexFinished() {
         return m_finished;
@@ -128,9 +141,9 @@ private:
     TableIndex *m_indexInserts;
     TableIndex *m_indexDeletes;
 
-	boost::scoped_ptr<IndexCursor> m_indexCursor;
-	boost::scoped_ptr<IndexCursor> m_insertsCursor;
-	boost::scoped_ptr<IndexCursor> m_deletesCursor;
+	IndexCursor m_indexCursor;
+	IndexCursor m_insertsCursor;
+	IndexCursor m_deletesCursor;
 
     /**
      * Memory pool for string allocations
@@ -146,6 +159,8 @@ private:
     TableTuple m_tuple;
 
     bool m_finished;
+
+    IndexLookupType m_indexLookupType;
 
     int64_t m_totalTuples;
     int64_t m_tuplesRemaining;

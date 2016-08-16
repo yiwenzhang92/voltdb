@@ -349,6 +349,16 @@ public:
     };
 
     /**
+     * sets the tuple to point to the key found by this cursor
+     *
+     * @return key if any entry to return, null if reached the end of this index
+     */
+    virtual TableTuple currentKey(IndexCursor& cursor) const
+    {
+        throwFatalException("Invoked TableIndex virtual method currentKey which has no implementation");
+    };
+
+    /**
      * sets the tuple to point the entry found by
      * moveToKeyOrGreater().  calls this repeatedly to get all entries
      * with or following to the search key.
@@ -461,6 +471,15 @@ public:
         throwFatalException("Invoked non-countable TableIndex virtual method getCounterLET which has no implementation");
     }
 
+
+    /**
+     * Compares a search key with the key at which this cursor is pointing
+     * Return 0 if equal, -1 if search key is less than the cursor, 1 if search key is greater than the cursor
+     */
+    virtual int compare(const TableTuple *searchKey, IndexCursor& cursor) const
+    {
+        throwFatalException("Invoked TableIndex virtual method compare which has no implementation");
+    }
 
     virtual size_t getSize() const = 0;
 

@@ -488,22 +488,23 @@ if whichtests in ("${eetestsuite}", "indexes"):
 if whichtests in ("${eetestsuite}", "storage"):
     CTX.TESTS['storage'] = """
      CopyOnWriteTest
-     CompactionTest
-     DRBinaryLog_test
-     DRTupleStream_test
-     ExportTupleStream_test
-     PersistentTableMemStatsTest
-     StreamedTable_test
-     TempTableLimitsTest
-     constraint_test
-     filter_test
-     persistent_table_log_test
-     persistenttable_test
-     serialize_test
-     table_and_indexes_test
-     table_test
-     tabletuple_export_test
     """
+#     CompactionTest
+#     DRBinaryLog_test
+#     DRTupleStream_test
+#     ExportTupleStream_test
+#     PersistentTableMemStatsTest
+#     StreamedTable_test
+#     TempTableLimitsTest
+#     constraint_test
+#     filter_test
+#     persistent_table_log_test
+#     persistenttable_test
+#     serialize_test
+#     table_and_indexes_test
+#     table_test
+#     tabletuple_export_test
+#    """
 
 if whichtests in ("${eetestsuite}", "structures"):
     CTX.TESTS['structures'] = """

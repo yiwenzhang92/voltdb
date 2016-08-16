@@ -78,8 +78,9 @@ public:
         : AbstractExecutor(engine, abstractNode)
         , m_projector()
         , m_searchKeyBackingStore(NULL)
-		, m_highVolume(false)
-		, m_limit(1)
+		, m_suspendable(false)
+		, m_tupleLimitForSuspendableFragments(1)
+		, m_isFirstPass(true)
         , m_aggExec(NULL)
     {}
     ~IndexScanExecutor();
@@ -120,7 +121,7 @@ private:
     bool p_init(AbstractPlanNode*,
                 TempTableLimits* limits);
     bool p_execute(const NValueArray &params);
-    virtual bool p_isSuspendable() {return m_highVolume;}
+    virtual bool p_isSuspendable() {return m_suspendable;}
     void outputTuple(CountingPostfilter& postfilter, TableTuple& tuple);
 
     // Data in this class is arranged roughly in the order it is read for
@@ -149,8 +150,9 @@ private:
     // So Valgrind doesn't complain:
     char* m_searchKeyBackingStore;
 
-    bool m_highVolume;
-    int m_limit;
+    bool m_suspendable;
+    int m_tupleLimitForSuspendableFragments;
+    bool m_isFirstPass;
 
     AggregateExecutorBase* m_aggExec;
 };

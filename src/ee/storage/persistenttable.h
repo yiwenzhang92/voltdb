@@ -256,6 +256,11 @@ public:
         m_tableStreamer->cleanupTuple(tuple, false);
     }
 
+    void adjustCursors(int type) {
+        // XXX For multiple CoW contexts, need to differentiate between CoWs
+        m_tableStreamer->adjustCursors(type);
+    }
+
 
     // ------------------------------------------------------------------
     // GENERIC TABLE OPERATIONS
@@ -391,7 +396,7 @@ public:
                         CatalogId tableId,
 						std::string indexName);
 
-    void deactivateCopyOnWriteContext();
+    void deactivateCopyOnWriteContext(TableStreamType cowType);
 
     /**
      * Prepare table for streaming from serialized data.

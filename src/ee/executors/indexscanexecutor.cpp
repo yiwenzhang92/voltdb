@@ -142,8 +142,8 @@ bool IndexScanExecutor::p_init(AbstractPlanNode *abstractNode,
     m_sortDirection = m_node->getSortDirection();
 
     // Determine whether this is suspendable
-    m_highVolume = m_node->isPauseable();
-    m_limit = m_node->getLimit();
+    m_suspendable = m_node->isSuspendable();
+    m_tupleLimitForSuspendableFragments = m_node->getTupleSuspendLimit();
 
     VOLT_DEBUG("IndexScan: %s.%s\n", targetTable->name().c_str(), tableIndex->getName().c_str());
 
@@ -173,19 +173,8 @@ bool IndexScanExecutor::p_execute(const NValueArray &params)
     IndexLookupType localLookupType = m_lookupType;
     SortDirectionType localSortDirection = m_sortDirection;
 
-    // XXX For suspendable, do we need to change any of this pre-lookup code?
-    if (m_highVolume) {
-        if (m_lookupType == INDEX_LOOKUP_TYPE_EQ
-            || m_lookupType == INDEX_LOOKUP_TYPE_GEO_CONTAINS) {
-        	targetTable->adjustCursors(0);
-        }
-
-        if ((m_lookupType != INDEX_LOOKUP_TYPE_EQ
-             && m_lookupType != INDEX_LOOKUP_TYPE_GEO_CONTAINS)
-            || activeNumOfSearchKeys == 0) {
-        	targetTable->adjustCursors(1);
-        }
-    }
+    bool yield = false;
+    int tupleCounter = 0;
 
     //
     // INLINE LIMIT
@@ -232,6 +221,7 @@ bool IndexScanExecutor::p_execute(const NValueArray &params)
     //
     // SEARCH KEY
     //
+    //XXX Only do this code path on first pass if the executor is suspendable
     bool earlyReturnForSearchKeyOutOfRange = false;
 
     searchKey.setAllNulls();
@@ -389,61 +379,84 @@ bool IndexScanExecutor::p_execute(const NValueArray &params)
     // Now loop through each tuple given to us by the iterator
     //
 
-    TableTuple tuple;
-    if (activeNumOfSearchKeys > 0) {
-        VOLT_TRACE("INDEX_LOOKUP_TYPE(%d) m_numSearchkeys(%d) key:%s",
-                localLookupType, activeNumOfSearchKeys, searchKey.debugNoHeader().c_str());
+    // XXX Only need to do this code path on first pass... otherwise index should be primed by CoW
 
-        if (localLookupType == INDEX_LOOKUP_TYPE_EQ) {
-            tableIndex->moveToKey(&searchKey, indexCursor);
+    // XXX For suspendable, do we need to change any of this pre-lookup code?
+    if (m_suspendable) {
+        if (m_lookupType == INDEX_LOOKUP_TYPE_EQ
+            || m_lookupType == INDEX_LOOKUP_TYPE_GEO_CONTAINS) {
+        	targetTable->adjustCursors(0);
         }
-        else if (localLookupType == INDEX_LOOKUP_TYPE_GT) {
-            tableIndex->moveToGreaterThanKey(&searchKey, indexCursor);
+
+        if ((m_lookupType != INDEX_LOOKUP_TYPE_EQ
+             && m_lookupType != INDEX_LOOKUP_TYPE_GEO_CONTAINS)
+            || activeNumOfSearchKeys == 0) {
+        	targetTable->adjustCursors(1);
         }
-        else if (localLookupType == INDEX_LOOKUP_TYPE_GTE) {
-            tableIndex->moveToKeyOrGreater(&searchKey, indexCursor);
-        }
-        else if (localLookupType == INDEX_LOOKUP_TYPE_LT) {
-            tableIndex->moveToLessThanKey(&searchKey, indexCursor);
-        }
-        else if (localLookupType == INDEX_LOOKUP_TYPE_LTE) {
-            // find the entry whose key is greater than search key,
-            // do a forward scan using initialExpr to find the correct
-            // start point to do reverse scan
-            bool isEnd = tableIndex->moveToGreaterThanKey(&searchKey, indexCursor);
-            if (isEnd) {
-                tableIndex->moveToEnd(false, indexCursor);
+    }
+
+    TableTuple tuple;
+    if (!m_suspendable || m_isFirstPass) {
+        if (activeNumOfSearchKeys > 0) {
+            VOLT_TRACE("INDEX_LOOKUP_TYPE(%d) m_numSearchkeys(%d) key:%s",
+                    localLookupType, activeNumOfSearchKeys, searchKey.debugNoHeader().c_str());
+
+            if (localLookupType == INDEX_LOOKUP_TYPE_EQ) {
+                tableIndex->moveToKey(&searchKey, indexCursor);
             }
-            else {
-                while (!(tuple = tableIndex->nextValue(indexCursor)).isNullTuple()) {
-                    pmp.countdownProgress();
-                    if (initial_expression != NULL && !initial_expression->eval(&tuple, NULL).isTrue()) {
-                        // just passed the first failed entry, so move 2 backward
-                        tableIndex->moveToBeforePriorEntry(indexCursor);
-                        break;
-                    }
-                }
-                if (tuple.isNullTuple()) {
+            else if (localLookupType == INDEX_LOOKUP_TYPE_GT) {
+                tableIndex->moveToGreaterThanKey(&searchKey, indexCursor);
+            }
+            else if (localLookupType == INDEX_LOOKUP_TYPE_GTE) {
+                tableIndex->moveToKeyOrGreater(&searchKey, indexCursor);
+            }
+            else if (localLookupType == INDEX_LOOKUP_TYPE_LT) {
+                tableIndex->moveToLessThanKey(&searchKey, indexCursor);
+            }
+            else if (localLookupType == INDEX_LOOKUP_TYPE_LTE) {
+                // find the entry whose key is greater than search key,
+                // do a forward scan using initialExpr to find the correct
+                // start point to do reverse scan
+                bool isEnd = tableIndex->moveToGreaterThanKey(&searchKey, indexCursor);
+                if (isEnd) {
                     tableIndex->moveToEnd(false, indexCursor);
                 }
+                else {
+                    while (!(tuple = tableIndex->nextValue(indexCursor)).isNullTuple()) {
+                        pmp.countdownProgress();
+                        if (initial_expression != NULL && !initial_expression->eval(&tuple, NULL).isTrue()) {
+                            // just passed the first failed entry, so move 2 backward
+                            tableIndex->moveToBeforePriorEntry(indexCursor);
+                            break;
+                        }
+                    }
+                    if (tuple.isNullTuple()) {
+                        tableIndex->moveToEnd(false, indexCursor);
+                    }
+                }
+            }
+            else if (localLookupType == INDEX_LOOKUP_TYPE_GEO_CONTAINS) {
+                tableIndex->moveToCoveringCell(&searchKey, indexCursor);
+            }
+            else {
+                return false;
             }
         }
-        else if (localLookupType == INDEX_LOOKUP_TYPE_GEO_CONTAINS) {
-            tableIndex->moveToCoveringCell(&searchKey, indexCursor);
-        }
         else {
-            return false;
+            bool toStartActually = (localSortDirection != SORT_DIRECTION_TYPE_DESC);
+            tableIndex->moveToEnd(toStartActually, indexCursor);
         }
     }
     else {
-        bool toStartActually = (localSortDirection != SORT_DIRECTION_TYPE_DESC);
-        tableIndex->moveToEnd(toStartActually, indexCursor);
+    	// This fragment was suspended. Update the CoW cursors
+    	targetTable->adjustCursors(localLookupType);
     }
 
     //
     // We have to different nextValue() methods for different lookup types
     //
-    while (postfilter.isUnderLimit() &&
+    while (!yield &&
+    		postfilter.isUnderLimit() &&
            getNextTupleInScan(localLookupType,
                         &tuple,
                         tableIndex,
@@ -487,6 +500,11 @@ bool IndexScanExecutor::p_execute(const NValueArray &params)
             }
             pmp.countdownProgress();
         }
+
+        tupleCounter++;
+        if (m_suspendable && tupleCounter >= m_tupleLimitForSuspendableFragments) {
+        	yield = true;
+        }
     }
 
     if (m_aggExec != NULL) {
@@ -503,14 +521,19 @@ inline bool IndexScanExecutor::getNextTupleInScan(IndexLookupType lookupType,
              TableIndex* index,
              IndexCursor* cursor,
              int activeNumOfSearchKeys) {
-         if (m_highVolume) {
-             // read from CoW
-             PersistentTable* targetTable = static_cast<PersistentTable*>(m_node->getTargetTable());
-            return targetTable->advanceCOWIterator(*tuple);
+	bool success = false;
+    if (m_suspendable) {
+        // read from CoW
+        PersistentTable* targetTable = static_cast<PersistentTable*>(m_node->getTargetTable());
+        success = targetTable->advanceCOWIterator(*tuple);
+        if (!success) {
+        	targetTable->deactivateCopyOnWriteContext(TABLE_STREAM_COPY_ON_WRITE_INDEX);
         }
-        else {
-            return getNextTuple(lookupType, tuple, index, cursor, activeNumOfSearchKeys);
-        }
+   }
+   else {
+       success = getNextTuple(lookupType, tuple, index, cursor, activeNumOfSearchKeys);
+   }
+   return success;
 }
 
 

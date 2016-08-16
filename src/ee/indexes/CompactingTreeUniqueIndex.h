@@ -127,6 +127,36 @@ class CompactingTreeUniqueIndex : public TableIndex
         return ! findTuple(*persistentTuple).isEnd();
     }
 
+    TableTuple currentValue(IndexCursor& cursor) const
+    {
+        TableTuple retval(getTupleSchema());
+        MapIterator &mapIter = castToIter(cursor);
+        std::cout << "index currentValue" << std::endl;
+        if (! mapIter.isEnd()) {
+        	std::cout << "index currentValue not end " << std::endl;
+            retval.move(const_cast<void*>(mapIter.value()));
+        }
+
+        return retval;
+    }
+
+    TableTuple currentKey(IndexCursor& cursor) const
+    {
+        TableTuple retval(getKeySchema());
+
+        /*
+        MapIterator &mapIter = castToIter(cursor);
+        std::cout << "index currentKey" << std::endl;
+
+        if (! mapIter.isEnd()) {
+        	std::cout << "index currentKey not end " << std::endl;
+        	retval.move(const_cast<void*>(mapIter.key()));
+        }
+         */
+
+        return retval;
+    }
+
     bool moveToKey(const TableTuple *searchKey, IndexCursor& cursor) const
     {
         cursor.m_forward = true;
@@ -224,6 +254,9 @@ class CompactingTreeUniqueIndex : public TableIndex
         cursor.m_forward = begin;
         MapIterator &mapIter = castToIter(cursor);
 
+
+        std::cout << "index moveToEnd " << begin << std::endl;
+
         if (begin)
             mapIter = m_entries.begin();
         else
@@ -232,11 +265,13 @@ class CompactingTreeUniqueIndex : public TableIndex
 
     TableTuple nextValue(IndexCursor& cursor) const
     {
+    	std::cout << "nextValue" << std::endl;
         TableTuple retval(getTupleSchema());
 
         MapIterator &mapIter = castToIter(cursor);
 
         if (! mapIter.isEnd()) {
+        	std::cout << "nextValue not end" << std::endl;
             retval.move(const_cast<void*>(mapIter.value()));
             if (cursor.m_forward) {
                 mapIter.moveNext();
@@ -250,6 +285,7 @@ class CompactingTreeUniqueIndex : public TableIndex
 
     TableTuple nextValueAtKey(IndexCursor& cursor) const
     {
+    	std::cout << "nextValueAtKey" << std::endl;
         TableTuple retval = cursor.m_match;
         cursor.m_match.move(NULL);
         return retval;
@@ -286,6 +322,7 @@ class CompactingTreeUniqueIndex : public TableIndex
 
     bool hasKey(const TableTuple *searchKey) const
     {
+    	std::cout << "hasKey" << std::endl;
         return ! findKey(searchKey).isEnd();
     }
 
@@ -326,6 +363,16 @@ class CompactingTreeUniqueIndex : public TableIndex
             }
         }
         return m_entries.rankAsc(mapIter.key());
+    }
+
+    int compare(const TableTuple *searchKey, IndexCursor& cursor) const {
+        const KeyType tmpKey(setKeyFromTuple(searchKey));
+        MapIterator mapIter = m_entries.lowerBound(tmpKey);
+        if (mapIter.isEnd()) {
+            return -1;
+        }
+        int cmp = m_cmp(tmpKey, mapIter.key());
+        return cmp;
     }
 
     size_t getSize() const { return m_entries.size(); }

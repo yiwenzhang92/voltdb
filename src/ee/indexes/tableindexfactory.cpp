@@ -297,6 +297,7 @@ TableIndex *TableIndexFactory::getInstance(const TableIndexScheme &scheme) {
             keyColumnAllowNull, keyColumnInBytes);
     assert(keySchema);
     VOLT_TRACE("Creating index for '%s' with key schema '%s'", scheme.name.c_str(), keySchema->debug().c_str());
+    std::cout << "Creating index for '" << scheme.name.c_str() <<"' with key schema '" << keySchema->debug().c_str() << "'" << std::endl;
     TableIndexPicker picker(keySchema, isIntsOnly, isInlinesOrColumnsOnly, scheme);
     TableIndex *retval = picker.getInstance();
     return retval;

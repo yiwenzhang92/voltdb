@@ -1282,11 +1282,11 @@ bool PersistentTable::activateCopyOnWriteContext(
     }
     std::vector<std::string> predicateStrings;
     FullTupleSerializer serializer;
-    return m_tableStreamer->activateStream(m_surgeon, serializer, cowType, predicateStrings);
+    return m_tableStreamer->activateStream(m_surgeon, serializer, cowType, predicateStrings, indexName);
 }
 
-void PersistentTable::deactivateCopyOnWriteContext() {
-    m_tableStreamer->deactivateStream(TABLE_STREAM_COPY_ON_WRITE_SCAN);
+void PersistentTable::deactivateCopyOnWriteContext(TableStreamType cowType) {
+    m_tableStreamer->deactivateStream(cowType);
 }
 
 /** Prepare table for streaming from serialized data. */
@@ -1320,7 +1320,7 @@ bool PersistentTable::activateStream(
         }
     }
 
-    return m_tableStreamer->activateStream(m_surgeon, tupleSerializer, streamType, predicateStrings);
+    return m_tableStreamer->activateStream(m_surgeon, tupleSerializer, streamType, predicateStrings, "");
 }
 
 /**
@@ -1342,7 +1342,8 @@ bool PersistentTable::activateWithCustomStreamer(TupleSerializer &tupleSerialize
         success = m_tableStreamer->activateStream(m_surgeon,
                                                   tupleSerializer,
                                                   streamType,
-                                                  predicateStrings);
+                                                  predicateStrings,
+												  "");
     }
     return success;
 }
@@ -1418,9 +1419,6 @@ void PersistentTable::notifyBlockWasCompactedAway(TBPtr block) {
         assert(m_blocksPendingSnapshot.find(block) != m_blocksPendingSnapshot.end());
         if (m_tableStreamer != NULL) {
             m_tableStreamer->notifyBlockWasCompactedAway(block);
-        }
-        if (m_copyOnWriteContext != NULL) {
-            m_copyOnWriteContext->notifyBlockWasCompactedAway(block);
         }
         return;
     }

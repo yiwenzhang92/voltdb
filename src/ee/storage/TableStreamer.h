@@ -64,7 +64,8 @@ public:
     virtual bool activateStream(PersistentTableSurgeon &surgeon,
                                 TupleSerializer &serializer,
                                 TableStreamType streamType,
-                                const std::vector<std::string> &predicateStrings);
+                                const std::vector<std::string> &predicateStrings,
+								std::string indexName);
 
     /**
      * Deactivate a stream
@@ -106,6 +107,24 @@ public:
             assert(streamPtr != NULL);
             assert(!handled);
             handled = streamPtr->m_context->cleanupTuple(tuple, deleteTuple) || handled;
+        }
+        return handled;
+    }
+
+    /**
+     * Fine-grained cursor adjustment hook.
+     * Return true if it was handled by the COW context.
+     */
+    virtual bool adjustCursors(int type) {
+        bool handled = false;
+        std::cout << "TableStreamer::adjustCursors" << std::endl;
+        // If any stream handles the notification, it's "handled".
+        // Only one COW should execute
+        BOOST_FOREACH(StreamPtr &streamPtr, m_streams) {
+            assert(streamPtr != NULL);
+            assert(!handled);
+            std::cout << "TableStreamer::adjustCursors " << streamPtr->m_streamType << std::endl;
+            handled = streamPtr->m_context->adjustCursors(type) || handled;
         }
         return handled;
     }

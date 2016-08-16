@@ -45,7 +45,8 @@ namespace voltdb
         virtual bool activateStream(PersistentTableSurgeon &surgeon,
                                     TupleSerializer &serializer,
                                     TableStreamType streamType,
-                                    const std::vector<std::string> &predicateStrings) = 0;
+                                    const std::vector<std::string> &predicateStrings,
+									std::string indexName) = 0;
 
         /**
          * Deactivate streaming
@@ -75,6 +76,8 @@ namespace voltdb
         virtual bool advanceIterator(TableTuple &tuple) = 0;
 
         virtual bool cleanupTuple(TableTuple &tuple, bool deleteTuple) = 0;
+
+        virtual bool adjustCursors(int type) = 0;
 
         /**
          * Tuple insert hook.
