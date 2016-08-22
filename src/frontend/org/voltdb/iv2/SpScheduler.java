@@ -736,7 +736,9 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
             // the initiatorHSId is the ClientInterface mailbox.
             // this will be on SPI without k-safety or replica only with k-safety
             assert(!message.isReadOnly());
-            setRepairLogTruncationHandle(spHandle);
+            if (spHandle > m_repairLogTruncationHandle) {
+                setRepairLogTruncationHandle(spHandle);
+            }
 
             m_mailbox.send(message.getInitiatorHSId(), message);
         }
