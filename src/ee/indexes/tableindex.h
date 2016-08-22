@@ -110,7 +110,8 @@ struct TableIndexScheme {
       countable(a_countable),
       expressionsAsText(),
       predicateAsText(),
-      tupleSchema(a_tupleSchema)
+      tupleSchema(a_tupleSchema),
+	  negativeDelta(false)
     {
     }
 
@@ -125,7 +126,8 @@ struct TableIndexScheme {
       countable(other.countable),
       expressionsAsText(other.expressionsAsText),
       predicateAsText(other.predicateAsText),
-      tupleSchema(other.tupleSchema)
+      tupleSchema(other.tupleSchema),
+	  negativeDelta(other.negativeDelta)
     {}
 
     TableIndexScheme& operator=(const TableIndexScheme& other)
@@ -141,6 +143,7 @@ struct TableIndexScheme {
         expressionsAsText = other.expressionsAsText;
         predicateAsText = other.predicateAsText;
         tupleSchema = other.tupleSchema;
+        negativeDelta = other.negativeDelta;
         return *this;
     }
 
@@ -162,6 +165,7 @@ struct TableIndexScheme {
     std::string expressionsAsText;
     std::string predicateAsText;
     const TupleSchema *tupleSchema;
+    bool negativeDelta;
 };
 
 struct IndexCursor {
@@ -171,6 +175,14 @@ public:
     {
         memset(m_keyIter, 0, sizeof(m_keyIter));
         memset(m_keyEndIter, 0, sizeof(m_keyEndIter));
+    }
+
+    IndexCursor(const IndexCursor &cursor) :
+    	m_forward(cursor.m_forward),
+		m_match(cursor.m_match)
+    {
+    	memcpy(m_keyIter, cursor.m_keyIter, sizeof(m_keyIter));
+    	memcpy(m_keyEndIter, cursor.m_keyEndIter, sizeof(m_keyIter));
     }
 
     ~IndexCursor() {
@@ -309,6 +321,31 @@ public:
         throwFatalException("Invoked TableIndex virtual method moveToLessThanKey which has no implementation");
     };
 
+    virtual bool moveToKeyOrGreaterByTuple(const TableTuple *persistentTuple, IndexCursor& cursor) const
+    {
+        throwFatalException("Invoked TableIndex virtual method moveToKeyOrGreaterByTuple which has no implementation");
+    };
+
+    virtual bool moveToKeyByTupleAddr(const TableTuple *persistentTuple, const void *addr, IndexCursor& cursor) const
+    {
+        throwFatalException("Invoked TableIndex virtual method moveToKeyOrGreaterByTuple which has no implementation");
+    };
+
+    virtual bool moveToExactKeyByTuple(const TableTuple *persistentTuple, const void *addr, IndexCursor& cursor) const
+    {
+        throwFatalException("Invoked TableIndex virtual method moveToExactKeyByTuple which has no implementation");
+    };
+
+    virtual bool moveToGreaterThanKeyByTuple(const TableTuple *persistentTuple, IndexCursor &cursor) const
+    {
+    	throwFatalException("Invoked TableIndex virtual method moveToGreaterThanKeyByTuple which has no implementation");
+    }
+
+    virtual bool moveToLessThanKeyByTuple(const TableTuple *persistentTuple, IndexCursor& cursor) const
+    {
+    	throwFatalException("Invoked TableIndex virtual method moveToLessThanKeyByTuple which has no implementation");
+    }
+
     virtual bool moveToCoveringCell(const TableTuple* searchKey,
                                     IndexCursor &cursor) const
     {
@@ -353,7 +390,7 @@ public:
      *
      * @return key if any entry to return, null if reached the end of this index
      */
-    virtual TableTuple currentKey(IndexCursor& cursor) const
+    virtual const void* currentKey(IndexCursor& cursor) const
     {
         throwFatalException("Invoked TableIndex virtual method currentKey which has no implementation");
     };
@@ -481,6 +518,16 @@ public:
         throwFatalException("Invoked TableIndex virtual method compare which has no implementation");
     }
 
+    /**
+     * Compares two keys
+     * returns -1/0/1
+     * if key1 </=/> key2
+     */
+    virtual int compare(const TableTuple *key1, const TableTuple *key2) const
+    {
+        throwFatalException("Invoked TableIndex virtual method compare which has no implementation");
+    }
+
     virtual size_t getSize() const = 0;
 
     // Return the amount of memory we think is allocated for this
@@ -517,6 +564,11 @@ public:
     const std::string& getName() const
     {
         return m_scheme.name;
+    }
+
+    const TableIndexScheme getScheme() const
+    {
+        return m_scheme;
     }
 
     void rename(std::string name) {

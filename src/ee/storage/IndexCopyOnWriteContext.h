@@ -79,7 +79,7 @@ public:
     /**
      * Rediscover cursor positions
      */
-    virtual bool adjustCursors(int type);
+    virtual bool adjustCursors(int type, IndexCursor *cursor);
 
     /**
      * Do surgery
@@ -156,7 +156,9 @@ private:
      */
     boost::scoped_ptr<TupleIterator> m_iterator;
 
-    TableTuple m_tuple;
+    TableTuple m_lastIndexTuple;
+    TableTuple m_lastDeletesTuple;
+    const void* m_keyAddr;
 
     bool m_finished;
 

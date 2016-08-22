@@ -381,20 +381,6 @@ bool IndexScanExecutor::p_execute(const NValueArray &params)
 
     // XXX Only need to do this code path on first pass... otherwise index should be primed by CoW
 
-    // XXX For suspendable, do we need to change any of this pre-lookup code?
-    if (m_suspendable) {
-        if (m_lookupType == INDEX_LOOKUP_TYPE_EQ
-            || m_lookupType == INDEX_LOOKUP_TYPE_GEO_CONTAINS) {
-        	targetTable->adjustCursors(0);
-        }
-
-        if ((m_lookupType != INDEX_LOOKUP_TYPE_EQ
-             && m_lookupType != INDEX_LOOKUP_TYPE_GEO_CONTAINS)
-            || activeNumOfSearchKeys == 0) {
-        	targetTable->adjustCursors(1);
-        }
-    }
-
     TableTuple tuple;
     if (!m_suspendable || m_isFirstPass) {
         if (activeNumOfSearchKeys > 0) {
@@ -447,9 +433,9 @@ bool IndexScanExecutor::p_execute(const NValueArray &params)
             tableIndex->moveToEnd(toStartActually, indexCursor);
         }
     }
-    else {
-    	// This fragment was suspended. Update the CoW cursors
-    	targetTable->adjustCursors(localLookupType);
+    if (m_suspendable) {
+    	// This fragment was or may be suspended. Update the CoW cursors
+    	targetTable->adjustCursors(localLookupType, &indexCursor);
     }
 
     //

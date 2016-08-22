@@ -72,7 +72,7 @@ static int32_t m_primaryKeyIndex = 0;
 
 // Selects extra-small quantity for debugging.
 //IMPORTANT: Comment out EXTRA_SMALL #define before checking in to reenable full testing!
-#define EXTRA_SMALL
+//#define EXTRA_SMALL
 
 #if defined(EXTRA_SMALL)
 
@@ -81,6 +81,8 @@ const size_t TUPLE_COUNT = 10;
 const size_t BUFFER_SIZE = 1024;
 const size_t NUM_REPETITIONS = 2;
 const size_t NUM_MUTATIONS = 5;
+const size_t NUM_COW_TUPLE_SCAN = 1;
+const size_t MAX_SECONDARY_KEY = 3;
 
 #elif defined(MEMCHECK)
 
@@ -89,6 +91,8 @@ const size_t TUPLE_COUNT = 1000;
 const size_t BUFFER_SIZE = 131072;
 const size_t NUM_REPETITIONS = 10;
 const size_t NUM_MUTATIONS = 10;
+const size_t NUM_COW_TUPLE_SCAN = 100;
+const size_t MAX_SECONDARY_KEY = 1000;
 
 #else
 
@@ -97,6 +101,8 @@ const size_t TUPLE_COUNT = 174762;
 const size_t BUFFER_SIZE = 131072;
 const size_t NUM_REPETITIONS = 10;
 const size_t NUM_MUTATIONS = 10;
+const size_t NUM_COW_TUPLE_SCAN = 1000;
+const size_t MAX_SECONDARY_KEY = 1000;
 
 #endif
 
@@ -199,6 +205,8 @@ public:
 
         m_primaryKeyIndexColumns.push_back(0);
 
+        m_secondaryKeyIndexColumns.push_back(2);
+
         m_undoToken = 0;
 
         m_tableId = 0;
@@ -238,6 +246,11 @@ public:
                                              m_primaryKeyIndexColumns,
                                              TableIndex::simplyIndexColumns(),
                                              true, true, m_tableSchema);
+        voltdb::TableIndexScheme secondaryIndexScheme("secondaryKeyIndex",
+                                             voltdb::BALANCED_TREE_INDEX,
+                                             m_secondaryKeyIndexColumns,
+                                             TableIndex::simplyIndexColumns(),
+                                             false, true, m_tableSchema);
         std::vector<voltdb::TableIndexScheme> indexes;
 
         m_table = dynamic_cast<voltdb::PersistentTable*>(
@@ -246,8 +259,11 @@ public:
                                                          tableAllocationTargetSize));
 
         TableIndex *pkeyIndex = TableIndexFactory::getInstance(indexScheme);
+        TableIndex *skeyIndex = TableIndexFactory::getInstance(secondaryIndexScheme);
         assert(pkeyIndex);
+        assert(skeyIndex);
         m_table->addIndex(pkeyIndex);
+        m_table->addIndex(skeyIndex);
         m_table->setPrimaryKeyIndex(pkeyIndex);
 
         TableTuple tuple(m_table->schema());
@@ -265,8 +281,10 @@ public:
         ::memset(tuple.address() + 1, 0, tuple.tupleLength() - 1);
         for (int ii = 0; ii < numTuples; ii++) {
             int value = rand();
+            int secondaryKey = rand() % MAX_SECONDARY_KEY;
             tuple.setNValue(0, ValueFactory::getIntegerValue(m_primaryKeyIndex++));
             tuple.setNValue(1, ValueFactory::getIntegerValue(value));
+            tuple.setNValue(2, ValueFactory::getIntegerValue(secondaryKey));
             bool success = table->insertTuple(tuple);
             if (!success) {
                 std::cout << "Failed to add random unique tuple" << std::endl;
@@ -441,6 +459,83 @@ public:
             if (!inserted) {
                 ASSERT_TRUE(inserted);
             }
+        }
+    }
+
+    void testTupleInsertionCopyOnWriteContexts(TableStreamType streamType, IndexLookupType indexLookupType, std::string indexName) {
+	    initTable(1, 0);
+	    int initTupleCount = 10;
+	    int addedTupleCount = 4;
+	    addRandomUniqueTuples( m_table, initTupleCount);
+
+	    char config[4];
+	    ::memset(config, 0, 4);
+	    // activate snapshot
+	    m_table->activateCopyOnWriteContext(streamType, 0, m_tableId, indexName);
+	    // insert tuples
+	    addRandomUniqueTuples(m_table, addedTupleCount);
+	    // do work - start reading the table
+	    int count = 0;
+	    TableTuple tuple;
+    	if (streamType == TABLE_STREAM_COPY_ON_WRITE_INDEX) {
+    		m_table->adjustCursors(indexLookupType);
+    	}
+	    while(m_table->advanceCOWIterator(tuple))
+	    {
+	        count++;
+	    }
+	    ASSERT_EQ(initTupleCount, count);
+	    // check the # tuple insertion count is reflected correctly
+	    ASSERT_EQ(initTupleCount+addedTupleCount, m_table->visibleTupleCount());
+	    m_table->deactivateCopyOnWriteContext(streamType);
+    }
+
+    // Test for copy on write contexts that's called for different copy on write context types
+    void testBigCopyOnWriteContexts(TableStreamType streamType, IndexLookupType indexLookupType, std::string indexName) {
+        initTable(1, 0);
+        int tupleCount = TUPLE_COUNT;
+        addRandomUniqueTuples( m_table, tupleCount);
+        for (int qq = 0; qq < NUM_REPETITIONS; qq++) {
+            T_ValueSet originalTuples;
+            getTableValueSet(originalTuples);
+
+            char config[4];
+            ::memset(config, 0, 4);
+
+            m_table->activateCopyOnWriteContext(streamType, 0, m_tableId, indexName);
+
+            T_ValueSet COWTuples;
+            int totalInserted = 0;
+            bool done = false;
+            while (!done) {
+            	if (streamType == TABLE_STREAM_COPY_ON_WRITE_INDEX) {
+            		m_table->adjustCursors(indexLookupType);
+            	}
+                for (int i = 0; i < NUM_COW_TUPLE_SCAN; i++) {
+                    TableTuple tuple(m_table->schema());
+                    if (!m_table->advanceCOWIterator(tuple)) {
+                        done = true;
+                        break;
+                    }
+                    ASSERT_TRUE(!tuple.isNullTuple());
+                    const bool inserted = COWTuples.insert(*reinterpret_cast<const int64_t*>(tuple.address() + 1)).second;
+                    if (!inserted) {
+                        printf("Failed in iteration %d, total inserted %d\n", qq, totalInserted);
+                    }
+                    //*debug*/ std::cout << "Inserted " << totalInserted << " " << tuple.debugNoHeader() << std::endl;
+                    ASSERT_TRUE(inserted);
+                    totalInserted++;
+                    m_table->cleanupTuple(tuple);
+                }
+
+                for (int jj = 0; jj < NUM_MUTATIONS; jj++) {
+                    doRandomTableMutation(m_table);
+                }
+            }
+
+            m_table->deactivateCopyOnWriteContext(streamType);
+            //*debug*/ std::cout << "Finished repetition " << qq << " total " << tupleCount + (m_tuplesInserted - m_tuplesDeleted) << std::endl;
+            checkTuples(tupleCount + (m_tuplesInserted - m_tuplesDeleted), originalTuples, COWTuples);
         }
     }
 
@@ -1110,6 +1205,7 @@ public:
     std::vector<int32_t> m_tableSchemaColumnSizes;
     std::vector<bool> m_tableSchemaAllowNull;
     std::vector<int> m_primaryKeyIndexColumns;
+    std::vector<int> m_secondaryKeyIndexColumns;
     char signature[20];
     DefaultTupleSerializer m_serializer;
     char m_serializationBuffer[BUFFER_SIZE];
@@ -1151,7 +1247,7 @@ public:
     T_ValueSet m_shuffles;
 };
 
-/*
+
 TEST_F(CopyOnWriteTest, CopyOnWriteIterator) {
     initTable(1, 0);
 
@@ -1232,152 +1328,62 @@ TEST_F(CopyOnWriteTest, TestTupleInsertionBetweenSnapshotActivateFinish) {
 
 // Simple test that performs LRR activation on empty table, inserts tuples and iterates through table
 TEST_F(CopyOnWriteTest, TestTupleInsertionBetweenLRRActivateFinish) {
-    initTable(1, 0);
-    int initTupleCount = 10;
-    int addedTupleCount = 4;
-    addRandomUniqueTuples( m_table, initTupleCount);
-
-    char config[4];
-    ::memset(config, 0, 4);
-    // activate snapshot
-    m_table->activateCopyOnWriteContext(TABLE_STREAM_COPY_ON_WRITE_SCAN, 0, m_tableId, "");
-    // insert tuples
-    addRandomUniqueTuples(m_table, addedTupleCount);
-    // do work - start reading the table
-    int count = 0;
-    TableTuple tuple;
-    while(m_table->advanceCOWIterator(tuple))
-    {
-        count++;
-    }
-    ASSERT_EQ(initTupleCount, count);
-    // check the # tuple insertion count is reflected correctly
-    ASSERT_EQ(initTupleCount+addedTupleCount, m_table->visibleTupleCount());
-    m_table->deactivateCopyOnWriteContext(TABLE_STREAM_COPY_ON_WRITE_SCAN);
+	testTupleInsertionCopyOnWriteContexts(TABLE_STREAM_COPY_ON_WRITE_SCAN, INDEX_LOOKUP_TYPE_INVALID, "");
 }
 
-*/
+
 // Simple test that performs LRR activation on empty table, inserts tuples and iterates through table
-TEST_F(CopyOnWriteTest, TestTupleInsertionBetweenLRRIndexActivateFinish) {
-    initTable(1, 0);
-    int initTupleCount = 10;
-    int addedTupleCount = 4;
-    addRandomUniqueTuples( m_table, initTupleCount);
 
-    char config[4];
-    ::memset(config, 0, 4);
-    // activate snapshot
-    std::cout << "activate context" << std::endl;
-    m_table->activateCopyOnWriteContext(TABLE_STREAM_COPY_ON_WRITE_INDEX, 0, m_tableId, "primaryKeyIndex");
-    std::cout << "activated context" << std::endl;
-    // insert tuples
-    addRandomUniqueTuples(m_table, addedTupleCount);
-    std::cout << "added tuples" << std::endl;
-    // do work - start reading the table
-    int count = 0;
-    TableTuple tuple;
-    std::cout << "adjusting cursors" << std::endl;
-    m_table->adjustCursors(INDEX_LOOKUP_TYPE_GT);
-    std::cout << "adjusted cursors" << std::endl;
-    while(m_table->advanceCOWIterator(tuple))
-    {
-        count++;
-    	std::cout << "iterated through tuple " << count << std::endl;
-    }
-    std::cout << "init: " << initTupleCount << " vs. actual: " << count << std::endl;
-    ASSERT_EQ(initTupleCount, count);
-    // check the # tuple insertion count is reflected correctly
-    ASSERT_EQ(initTupleCount+addedTupleCount, m_table->visibleTupleCount());
-    m_table->deactivateCopyOnWriteContext(TABLE_STREAM_COPY_ON_WRITE_INDEX);
+TEST_F(CopyOnWriteTest, TestTupleInsertionBetweenLRRIndexPrimaryActivateFinish) {
+	testTupleInsertionCopyOnWriteContexts(TABLE_STREAM_COPY_ON_WRITE_INDEX, INDEX_LOOKUP_TYPE_GT, "primaryKeyIndex");
 }
 
-TEST_F(CopyOnWriteTest, BigLRRIndexTest) {
-    initTable(1, 0);
-    int tupleCount = TUPLE_COUNT;
-    addRandomUniqueTuples( m_table, tupleCount);
-    for (int qq = 0; qq < NUM_REPETITIONS; qq++) {
-        T_ValueSet originalTuples;
-        getTableValueSet(originalTuples);
 
-        char config[4];
-        ::memset(config, 0, 4);
-
-        std::cout << "CoW test start iter" << std::endl;
-        m_table->activateCopyOnWriteContext(TABLE_STREAM_COPY_ON_WRITE_INDEX, 0, m_tableId, "primaryKeyIndex");
-
-        T_ValueSet COWTuples;
-        int totalInserted = 0;
-        bool done = false;
-        while (!done) {
-        	std::cout << "CoW test start inside iter" << std::endl;
-        	m_table->adjustCursors(INDEX_LOOKUP_TYPE_GT);
-            for (int i = 0; i < 1; i++) {
-                TableTuple tuple(m_table->schema());
-                if (!m_table->advanceCOWIterator(tuple)) {
-                    done = true;
-                    break;
-                }
-                std::cout << "got new tuple" << std::endl;
-                ASSERT_TRUE(!tuple.isNullTuple());
-                const bool inserted = COWTuples.insert(*reinterpret_cast<const int64_t*>(tuple.address() + 1)).second;
-                if (!inserted) {
-                    printf("Failed in iteration %d, total inserted %d\n", qq, totalInserted);
-                }
-                std::cout << "Inserted " << totalInserted << " " << tuple.debugNoHeader() << std::endl;
-                ASSERT_TRUE(inserted);
-                totalInserted++;
-                m_table->cleanupTuple(tuple);
-            }
-            std::cout << "CoW test finished inside iter" << std::endl;
-            for (int jj = 0; jj < NUM_MUTATIONS; jj++) {
-                doRandomTableMutation(m_table);
-            }
-        }
-        std::cout << "CoW test finished iter" << std::endl;
-        m_table->deactivateCopyOnWriteContext(TABLE_STREAM_COPY_ON_WRITE_INDEX);
-    }
+TEST_F(CopyOnWriteTest, TestTupleInsertionBetweenLRRIndexSecondaryActivateFinish) {
+	testTupleInsertionCopyOnWriteContexts(TABLE_STREAM_COPY_ON_WRITE_INDEX, INDEX_LOOKUP_TYPE_GT, "secondaryKeyIndex");
 }
 
-/*
 
-TEST_F(CopyOnWriteTest, BigLRRTest) {
-    initTable(1, 0);
-    int tupleCount = TUPLE_COUNT;
-    addRandomUniqueTuples( m_table, tupleCount);
-    for (int qq = 0; qq < NUM_REPETITIONS; qq++) {
-        T_ValueSet originalTuples;
-        getTableValueSet(originalTuples);
+TEST_F(CopyOnWriteTest, BigLRRIndexGTSecondaryTest) {
+	testBigCopyOnWriteContexts(TABLE_STREAM_COPY_ON_WRITE_INDEX, INDEX_LOOKUP_TYPE_GT, "secondaryKeyIndex");
+}
 
-        char config[4];
-        ::memset(config, 0, 4);
 
-        m_table->activateCopyOnWriteContext(TABLE_STREAM_COPY_ON_WRITE_SCAN, 0, m_tableId, "");
+TEST_F(CopyOnWriteTest, BigLRRIndexLTSecondaryTest) {
+	testBigCopyOnWriteContexts(TABLE_STREAM_COPY_ON_WRITE_INDEX, INDEX_LOOKUP_TYPE_LT, "secondaryKeyIndex");
+}
 
-        T_ValueSet COWTuples;
-        int totalInserted = 0;
-        bool done = false;
-        while (!done) {
-            for (int i = 0; i < 1000; i++) {
-                TableTuple tuple(m_table->schema());
-                if (!m_table->advanceCOWIterator(tuple)) {
-                    done = true;
-                    break;
-                }
-                const bool inserted = COWTuples.insert(*reinterpret_cast<const int64_t*>(tuple.address() + 1)).second;
-                if (!inserted) {
-                    printf("Failed in iteration %d, total inserted %d\n", qq, totalInserted);
-                }
-                //std::cout << "Inserted " << totalInserted << " " << tuple.debugNoHeader() << std::endl;
-                ASSERT_TRUE(inserted);
-                totalInserted++;
-                m_table->cleanupTuple(tuple);
-            }
-            for (int jj = 0; jj < NUM_MUTATIONS; jj++) {
-                doRandomTableMutation(m_table);
-            }
-        }
-        m_table->deactivateCopyOnWriteContext(TABLE_STREAM_COPY_ON_WRITE_SCAN);
-    }
+TEST_F(CopyOnWriteTest, BigLRRIndexGTESecondaryTest) {
+	testBigCopyOnWriteContexts(TABLE_STREAM_COPY_ON_WRITE_INDEX, INDEX_LOOKUP_TYPE_GTE, "secondaryKeyIndex");
+}
+
+
+TEST_F(CopyOnWriteTest, BigLRRIndexLTESecondaryTest) {
+	testBigCopyOnWriteContexts(TABLE_STREAM_COPY_ON_WRITE_INDEX, INDEX_LOOKUP_TYPE_LTE, "secondaryKeyIndex");
+}
+
+TEST_F(CopyOnWriteTest, BigLRRIndexGTPrimaryTest) {
+	testBigCopyOnWriteContexts(TABLE_STREAM_COPY_ON_WRITE_INDEX, INDEX_LOOKUP_TYPE_GT, "primaryKeyIndex");
+}
+
+
+TEST_F(CopyOnWriteTest, BigLRRIndexLTPrimaryTest) {
+	testBigCopyOnWriteContexts(TABLE_STREAM_COPY_ON_WRITE_INDEX, INDEX_LOOKUP_TYPE_LT, "primaryKeyIndex");
+}
+
+TEST_F(CopyOnWriteTest, BigLRRIndexGTEPrimaryTest) {
+	testBigCopyOnWriteContexts(TABLE_STREAM_COPY_ON_WRITE_INDEX, INDEX_LOOKUP_TYPE_GTE, "primaryKeyIndex");
+}
+
+
+TEST_F(CopyOnWriteTest, BigLRRIndexLTEPrimaryTest) {
+	testBigCopyOnWriteContexts(TABLE_STREAM_COPY_ON_WRITE_INDEX, INDEX_LOOKUP_TYPE_LTE, "primaryKeyIndex");
+}
+
+
+
+TEST_F(CopyOnWriteTest, BigLRRScanTest) {
+	testBigCopyOnWriteContexts(TABLE_STREAM_COPY_ON_WRITE_SCAN, INDEX_LOOKUP_TYPE_INVALID, "");
 }
 
 TEST_F(CopyOnWriteTest, BigTest) {
@@ -1572,13 +1578,11 @@ TEST_F(CopyOnWriteTest, BigTestUndoEverything) {
         checkTuples(0, originalTuples, COWTuples);
     }
 }
-*/
 
 
 /**
  * Exercise the multi-COW.
  */
-/*
 TEST_F(CopyOnWriteTest, MultiStream) {
 
     // Constants
@@ -1718,7 +1722,6 @@ TEST_F(CopyOnWriteTest, MultiStream) {
         checkMultiCOW(expected, actual, doDelete, tupleCount, totalSkipped);
     }
 }
-*/
 
 /*
  * Test for the ENG-4524 edge condition where serializeMore() yields on
@@ -1731,7 +1734,6 @@ TEST_F(CopyOnWriteTest, MultiStream) {
  * another tuple immediately after writing the last one. It doesn't know how
  * many there are so it yields even if no more tuples will be delivered.
  */
-/*
 TEST_F(CopyOnWriteTest, BufferBoundaryCondition) {
     const size_t tupleCount = 3;
     const size_t bufferSize = (sizeof(int32_t) * 3) + ((m_tupleWidth + sizeof(int32_t)) * tupleCount);
@@ -1757,7 +1759,6 @@ TEST_F(CopyOnWriteTest, BufferBoundaryCondition) {
     size_t curPendingCount = m_table->getBlocksNotPendingSnapshotCount();
     ASSERT_EQ(origPendingCount, curPendingCount);
 }
-*/
 
 
 /**
@@ -1887,7 +1888,6 @@ public:
 };
 
 // Test the elastic scanner.
-/*
 TEST_F(CopyOnWriteTest, ElasticScanner) {
 
     const int NUM_PARTITIONS = 1;
@@ -1939,7 +1939,6 @@ TEST_F(CopyOnWriteTest, ElasticScanner) {
 
     checkScanner();
 }
-*/
 
 /**
  * Dummy pass-through elastic TableStreamer for testing the index.
@@ -2001,7 +2000,6 @@ public:
 };
 
 // Test elastic index creation.
-/*
 TEST_F(CopyOnWriteTest, ElasticIndex) {
     const int NUM_PARTITIONS = 1;
     const int TUPLES_PER_BLOCK = 50;
@@ -2042,7 +2040,6 @@ TEST_F(CopyOnWriteTest, ElasticIndex) {
 
     checkIndex("ElasticIndex", getElasticIndex(), predicates, false);
 }
-*/
 
 /**
  * Tests that a snapshot scan and an elastic index can coexist.
@@ -2052,7 +2049,6 @@ TEST_F(CopyOnWriteTest, ElasticIndex) {
  *  3) Perform snapshot scan.
  *  4) Check the index.
  */
-/*
 TEST_F(CopyOnWriteTest, SnapshotAndIndex) {
     const int NUM_PARTITIONS = 1;
     const int TUPLES_PER_BLOCK = 50;
@@ -2180,7 +2176,6 @@ TEST_F(CopyOnWriteTest, ElasticIndexLowerUpperBounds) {
     ASSERT_TRUE(key1 == *index.createLowerBoundIterator(1));
     ASSERT_TRUE(index.createUpperBoundIterator(3) == index.end());
 }
-*/
 
 int main() {
     return TestSuite::globalInstance()->runAll();

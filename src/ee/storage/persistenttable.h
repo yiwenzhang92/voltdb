@@ -256,9 +256,9 @@ public:
         m_tableStreamer->cleanupTuple(tuple, false);
     }
 
-    void adjustCursors(int type) {
+    void adjustCursors(int type, IndexCursor *cursor) {
         // XXX For multiple CoW contexts, need to differentiate between CoWs
-        m_tableStreamer->adjustCursors(type);
+        m_tableStreamer->adjustCursors(type, cursor);
     }
 
 

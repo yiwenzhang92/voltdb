@@ -40,6 +40,7 @@ namespace voltdb
 class PersistentTable;
 class PersistentTableSurgeon;
 class TupleOutputStreamProcessor;
+struct IndexCursor;
 
 class TableStreamer : public TableStreamerInterface
 {
@@ -115,16 +116,16 @@ public:
      * Fine-grained cursor adjustment hook.
      * Return true if it was handled by the COW context.
      */
-    virtual bool adjustCursors(int type) {
+    virtual bool adjustCursors(int type, IndexCursor *cursor) {
         bool handled = false;
-        std::cout << "TableStreamer::adjustCursors" << std::endl;
+        //* debug */ std::cout << "TableStreamer::adjustCursors" << std::endl;
         // If any stream handles the notification, it's "handled".
         // Only one COW should execute
         BOOST_FOREACH(StreamPtr &streamPtr, m_streams) {
             assert(streamPtr != NULL);
             assert(!handled);
-            std::cout << "TableStreamer::adjustCursors " << streamPtr->m_streamType << std::endl;
-            handled = streamPtr->m_context->adjustCursors(type) || handled;
+            //* debug */ std::cout << "TableStreamer::adjustCursors " << streamPtr->m_streamType << std::endl;
+            handled = streamPtr->m_context->adjustCursors(type, cursor) || handled;
         }
         return handled;
     }

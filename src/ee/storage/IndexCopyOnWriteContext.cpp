@@ -47,13 +47,14 @@ IndexCopyOnWriteContext::IndexCopyOnWriteContext(
              m_table(table),
              m_surgeon(surgeon),
 			 m_index(index),
-			 m_indexInserts(TableIndexFactory::cloneEmptyTreeIndex(index)),
-			 m_indexDeletes(TableIndexFactory::cloneEmptyTreeIndex(index)),
+			 //m_indexInserts(TableIndexFactory::cloneEmptyTreeIndex(index)),
+			 //m_indexDeletes(TableIndexFactory::cloneEmptyTreeIndex(index)),
 			 m_indexCursor(index.getTupleSchema()),
 			 m_insertsCursor(index.getTupleSchema()),
 			 m_deletesCursor(index.getTupleSchema()),
              m_pool(2097152, 320),
-             m_tuple(table.schema()),
+			 m_lastIndexTuple(table.schema()),
+			 m_lastDeletesTuple(table.schema()),
              m_finished(false),
              m_totalTuples(totalTuples),
              m_tuplesRemaining(totalTuples),
@@ -63,6 +64,15 @@ IndexCopyOnWriteContext::IndexCopyOnWriteContext(
              m_deletes(0),
              m_updates(0)
 {
+	// Negative delta indexes should be unique and not countable in order for the table index factory
+	// to generate the correct types.
+    voltdb::TableIndexScheme indexScheme(index.getScheme());
+    //indexScheme.unique = true;
+    indexScheme.unique = index.isUniqueIndex();
+    indexScheme.negativeDelta = true;
+    indexScheme.countable = false;
+    m_indexInserts = TableIndexFactory::getInstance(indexScheme);
+    m_indexDeletes = TableIndexFactory::getInstance(indexScheme);
 }
 
 /**
@@ -77,7 +87,7 @@ IndexCopyOnWriteContext::~IndexCopyOnWriteContext()
 TableStreamerContext::ActivationReturnCode
 IndexCopyOnWriteContext::handleActivation(TableStreamType streamType)
 {
-	std::cout << "IndexCopyOnWriteContext::handleActivation" << std::endl;
+	//* debug */ std::cout << "IndexCopyOnWriteContext::handleActivation" << std::endl;
     if (m_finished && m_tuplesRemaining == 0) {
         return ACTIVATION_FAILED;
     }
@@ -88,9 +98,16 @@ IndexCopyOnWriteContext::handleActivation(TableStreamType streamType)
 }
 
 bool
-IndexCopyOnWriteContext::adjustCursors(int type) {
-	std::cout << "IndexCopyOnWriteContext::adjustCursors " << type << std::endl;
+IndexCopyOnWriteContext::adjustCursors(int type, IndexCursor *cursor) {
+	//* debug */ std::cout << "IndexCopyOnWriteContext::adjustCursors " << type << std::endl;
 	m_indexLookupType = static_cast<IndexLookupType>(type);
+
+	if (m_lastIndexTuple.isNullTuple() && m_lastDeletesTuple.isNullTuple() && cursor != NULL) {
+		//m_indexCursor(cursor);
+		m_indexCursor = *cursor;
+		return true;
+	}
+
 	TableTuple tuple;
 
 	//XXX do we need to lookup equal keys?
@@ -101,47 +118,54 @@ IndexCopyOnWriteContext::adjustCursors(int type) {
     		m_indexLookupType == INDEX_LOOKUP_TYPE_GT ||
 			m_indexLookupType == INDEX_LOOKUP_TYPE_GTE
     		) {
-    	// In tests we may not have initialized the cursors
-    	if (m_tuple.isNullTuple()) {
-    		std::cout << "green" << std::endl;
+    	if (m_lastIndexTuple.isNullTuple()) {
     		m_index.moveToEnd(true, m_indexCursor);
-    		std::cout << "eggs" << std::endl;
-    		m_indexDeletes->moveToEnd(true, m_deletesCursor);
-    		std::cout << "ham" << std::endl;
     	}
     	else {
-    		/*
-        	std::cout << "hello" << std::endl;
-    		m_index.moveToGreaterThanKey(&m_tuple, m_indexCursor);
-    		std::cout << "world" << std::endl;
-    		m_indexDeletes->moveToGreaterThanKey(&m_tuple, m_deletesCursor);
-    		std::cout << "done" << std::endl;
-    		*/
-        	std::cout << "hello" << std::endl;
-    		m_index.moveToKeyByTuple(&m_tuple, m_indexCursor);
-    		std::cout << "world" << std::endl;
-    		m_indexDeletes->moveToKeyByTuple(&m_tuple, m_deletesCursor);
-    		std::cout << "done" << std::endl;
+    		//* debug */ std::cout << "adjustIndexCursor to " << m_lastIndexTuple.debugNoHeader() << std::endl;
+    		m_index.moveToGreaterThanKeyByTuple(&m_lastIndexTuple, m_indexCursor);
     	}
+    	if (m_lastDeletesTuple.isNullTuple()) {
+    		m_indexDeletes->moveToEnd(true, m_deletesCursor);
+    	}
+    	else {
+    		//* debug */ std::cout << "adjustDeletesCursor to " << m_lastDeletesTuple.debugNoHeader() << std::endl;
+    		m_indexDeletes->moveToKeyByTupleAddr(&m_lastDeletesTuple, m_keyAddr, m_deletesCursor);
+    		m_indexDeletes->nextValue(m_deletesCursor);
+    		if (!m_indexDeletes->currentValue(m_deletesCursor).isNullTuple()) {
+    		//* debug */ std::cout << "adjusted to " << m_indexDeletes->currentValue(m_deletesCursor).debugNoHeader() << std::endl;
+    		}
+    	}
+
     }
     else if (m_indexLookupType == INDEX_LOOKUP_TYPE_LT ||
     		m_indexLookupType == INDEX_LOOKUP_TYPE_LTE
     		) {
-    	if (m_tuple.isNullTuple()) {
+    	if (m_lastIndexTuple.isNullTuple()) {
     		m_index.moveToEnd(false, m_indexCursor);
+    	}
+    	else {
+    		//* debug */ std::cout << "adjustIndexCursor to " << m_lastIndexTuple.debugNoHeader() << std::endl;
+    		m_index.moveToLessThanKeyByTuple(&m_lastIndexTuple, m_indexCursor);
+    	}
+    	if (m_lastDeletesTuple.isNullTuple()) {
     		m_indexDeletes->moveToEnd(false, m_deletesCursor);
     	}
     	else {
-    		m_index.moveToLessThanKey(&m_tuple, m_indexCursor);
-    		m_indexDeletes->moveToLessThanKey(&m_tuple, m_deletesCursor);
+    		//* debug */ std::cout << "adjustDeletesCursor to " << m_lastDeletesTuple.debugNoHeader() << std::endl;
+    		m_indexDeletes->moveToKeyByTupleAddr(&m_lastDeletesTuple, m_keyAddr, m_deletesCursor);
+    		m_indexDeletes->nextValue(m_deletesCursor);
+    		if (!m_indexDeletes->currentValue(m_deletesCursor).isNullTuple()) {
+    		//* debug */ std::cout << "adjusted to " << m_indexDeletes->currentValue(m_deletesCursor).debugNoHeader() << std::endl;
+    		}
     	}
     }
     else if (m_indexLookupType == INDEX_LOOKUP_TYPE_GEO_CONTAINS) {
     	// moveToCoveringCell  finds the exact tuple... so we need a way to find the next one m_tuple should be at
     	// also, the exact tuple will either be in m_index or m_indexDeletes, but not both, so we need to find
     	// a way to get to the "next" value
-		m_index.moveToCoveringCell(&m_tuple, m_indexCursor);
-		m_indexDeletes->moveToCoveringCell(&m_tuple, m_deletesCursor);
+		m_index.moveToCoveringCell(&m_lastIndexTuple, m_indexCursor);
+		m_indexDeletes->moveToCoveringCell(&m_lastDeletesTuple, m_deletesCursor);
     }
     return true;
 }
@@ -151,15 +175,36 @@ IndexCopyOnWriteContext::adjustCursors(int type) {
  */
 bool IndexCopyOnWriteContext::advanceIterator(TableTuple &tuple) {
 	PersistentTable &table = m_table;
-	std::cout << "advanceIterator remaining " << m_tuplesRemaining << std::endl;
+	//* debug */ std::cout << "advanceIterator remaining " << m_tuplesRemaining << std::endl;
+	//* debug */ std::cout << "INDEX " << m_index.debug() << std::endl;
+	//* debug */ std::cout << "INSERTS " << m_indexInserts->debug() << std::endl;
+	//* debug */ std::cout << "DELETES " << m_indexDeletes->debug() << std::endl;
 	// Compare cursors and start from the lowest between deletes and current index
 	TableTuple deletesTuple(table.schema());
 	TableTuple indexTuple(table.schema());
 	deletesTuple = m_indexDeletes->currentValue(m_deletesCursor);
 	indexTuple = m_index.currentValue(m_indexCursor);
+	if (!indexTuple.isNullTuple()) {
+		//* debug */ std::cout << "current indexTuple: " << indexTuple.debugNoHeader() << std::endl;
+	}
+	if (!deletesTuple.isNullTuple()) {
+		//* debug */ std::cout << "current deletesTuple: " << deletesTuple.debugNoHeader() << std::endl;
+	}
 	while (!indexTuple.isNullTuple() || !deletesTuple.isNullTuple()) {
-		if (indexTuple.isNullTuple() || m_indexDeletes->compare(&indexTuple, m_deletesCursor) > 0) {
-			std::cout << "advanceIterator deletes1 " << deletesTuple.debugNoHeader() << std::endl;
+		bool deleteTupleLessThanindexTuple = m_indexDeletes->compare(&indexTuple, m_deletesCursor) > 0;
+		if (!deletesTuple.isNullTuple() &&
+				(indexTuple.isNullTuple() ||
+				((m_indexLookupType == INDEX_LOOKUP_TYPE_EQ ||
+			    		m_indexLookupType == INDEX_LOOKUP_TYPE_GT ||
+						m_indexLookupType == INDEX_LOOKUP_TYPE_GTE)
+						&& deleteTupleLessThanindexTuple) ||
+				((m_indexLookupType == INDEX_LOOKUP_TYPE_LT ||
+					    m_indexLookupType == INDEX_LOOKUP_TYPE_LTE)
+						&& !deleteTupleLessThanindexTuple))
+				) {
+			//* debug */ std::cout << "advanceIterator deletes1 " << deletesTuple.debugNoHeader() << std::endl;
+			m_lastDeletesTuple = deletesTuple;
+			m_keyAddr = m_indexDeletes->currentKey(m_deletesCursor);
 			// found the next tuple to scan in the delete records...return it
 			if (m_indexLookupType == INDEX_LOOKUP_TYPE_EQ
 		            || m_indexLookupType == INDEX_LOOKUP_TYPE_GEO_CONTAINS) {
@@ -168,22 +213,16 @@ bool IndexCopyOnWriteContext::advanceIterator(TableTuple &tuple) {
 			else {
 				deletesTuple = m_indexDeletes->nextValue(m_deletesCursor);
 			}
-			m_tuple = m_indexDeletes->currentValue(m_deletesCursor);
-
-			if (m_indexInserts->hasKey(&indexTuple)) {
-				std::cout << "found key in inserts" << std::endl;
-				deletesTuple = m_indexDeletes->currentValue(m_deletesCursor);
-				continue;
-			}
-			std::cout << "advanceIterator deletes2 " << deletesTuple.debugNoHeader() << std::endl;
+			//* debug */ std::cout << "advanceIterator deletes2 " << deletesTuple.debugNoHeader() << std::endl;
 			m_tuplesRemaining--;
-			tuple = m_tuple;
+			tuple = m_lastDeletesTuple;
 			return true;
 		}
 		else {
 			// found the next tuple to scan in the normal index.
 			// check if this tuple can be found in the insert keys
-			std::cout << "advanceIterator index1 " << indexTuple.debugNoHeader() << std::endl;
+			//* debug */ std::cout << "advanceIterator index1 " << indexTuple.debugNoHeader() << std::endl;
+			m_lastIndexTuple = indexTuple;
 			if (m_indexLookupType == INDEX_LOOKUP_TYPE_EQ
 		            || m_indexLookupType == INDEX_LOOKUP_TYPE_GEO_CONTAINS) {
 				indexTuple = m_index.nextValueAtKey(m_indexCursor);
@@ -191,29 +230,20 @@ bool IndexCopyOnWriteContext::advanceIterator(TableTuple &tuple) {
 			else {
 				indexTuple = m_index.nextValue(m_indexCursor);
 			}
-			m_tuple = m_index.currentValue(m_indexCursor);
-			if (!indexTuple.isNullTuple()) {
-				std::cout << "advanceIterator index2 " << indexTuple.debugNoHeader() << std::endl;
-			}
-			else {
-				std::cout << "advanceIterator index2 NULL" << std::endl;
-			}
 			if (m_indexInserts->exists(&indexTuple)) {
-				std::cout << "found key in inserts" << std::endl;
+				//* debug */ std::cout << "found key in inserts" << std::endl;
 				indexTuple = m_index.currentValue(m_indexCursor);
 				continue;
 			}
-
-			std::cout << "advanceIterator index3" << std::endl;
 			m_tuplesRemaining--;
-			tuple = m_tuple;
+			tuple = m_lastIndexTuple;
 			return true;
 		}
 
 		break;
 	}
 	m_finished = true;
-	std::cout << "advanceIterator DONE" << std::endl;
+	//* debug */ std::cout << "advanceIterator DONE" << std::endl;
 	return false;
 
 }
@@ -293,18 +323,113 @@ bool IndexCopyOnWriteContext::cleanup() {
 }
 
 bool IndexCopyOnWriteContext::notifyTupleDelete(TableTuple &tuple) {
-	std::cout << "notifyTupleDelete " << tuple.debugNoHeader() << std::endl;
+	//* debug */ std::cout << "notifyTupleDelete " << tuple.debugNoHeader() << std::endl;
 	PersistentTable &table = m_table;
 	TableTuple conflict(table.schema());
+	TableTuple copy(table.schema());
 
     m_deletes++;
 
     if (!m_indexInserts->exists(&tuple)) {
     	// Copy data
-    	m_backedUpTuples->insertTempTupleDeepCopy(tuple, &m_pool);
+    	copy = m_backedUpTuples->insertTempTupleDeepCopy(tuple, &m_pool);
     	// Add to delete tree
-    	m_indexDeletes->addEntry(&tuple, &conflict);
+    	m_indexDeletes->addEntry(&copy, &tuple);
+
+
+		// We may need to adjust the delete cursor
+		if (!m_lastIndexTuple.isNullTuple()) {
+			// is the tuple updated before the lastIndexTuple?
+
+			//m_index.moveToKeyByTuple(&m_lastIndexTuple, m_indexCursor);
+			int tupleLTELastIndexCompare = m_index.compare(&tuple, &m_lastIndexTuple);
+			//std::cout << "comparing to m_lastIndexTuple " << tupleLTELastIndexCompare << " " << m_lastIndexTuple.debugNoHeader() << std::endl;
+
+			bool deleteTupleLessThanindexTuple = false;
+			if (!m_lastDeletesTuple.isNullTuple()) {
+
+				m_indexDeletes->moveToKeyByTupleAddr(&m_lastDeletesTuple, m_keyAddr, m_deletesCursor);
+				int deletesComp = m_indexDeletes->compare(&tuple, m_deletesCursor);
+				deleteTupleLessThanindexTuple = deletesComp > 0;
+				//std::cout << "comparing to m_lastDeletesTuple " << deletesComp << " " << m_lastDeletesTuple.debugNoHeader() << std::endl;
+			}
+			bool typeGT = (m_indexLookupType == INDEX_LOOKUP_TYPE_EQ ||
+		    		m_indexLookupType == INDEX_LOOKUP_TYPE_GT ||
+					m_indexLookupType == INDEX_LOOKUP_TYPE_GTE);
+			bool typeLT = (m_indexLookupType == INDEX_LOOKUP_TYPE_LT ||
+				    m_indexLookupType == INDEX_LOOKUP_TYPE_LTE);
+			if (
+					(typeGT
+					&& (m_lastDeletesTuple.isNullTuple() || deleteTupleLessThanindexTuple)
+					&& tupleLTELastIndexCompare <= 0) ||
+					(typeLT
+					&& (m_lastDeletesTuple.isNullTuple() || !deleteTupleLessThanindexTuple)
+					&& tupleLTELastIndexCompare >= 0)) {
+				/*
+				if (!m_lastDeletesTuple.isNullTuple()) {
+				std::cout << "Moving lastDeletesTuple from " << m_lastDeletesTuple.debugNoHeader() << std::endl;
+				}
+				else {
+					std::cout << "Moving lastDeletesTuple from NULL " << std::endl;
+				}
+				std::cout << "to " << tuple.debugNoHeader() << std::endl;
+				*/
+				m_lastDeletesTuple = copy;
+				m_keyAddr = tuple.address();
+
+			}
+		}
+
     }
+    else {
+    	m_indexInserts->deleteEntry(&tuple);
+    }
+
+	if (!m_lastIndexTuple.isNullTuple() && m_index.compare(&tuple, &m_lastIndexTuple) == 0) {
+		// need to readjust index cursor so m_lastIndexTuple points to a valid tuple after this one is deleted
+	    if (m_indexLookupType == INDEX_LOOKUP_TYPE_EQ ||
+	    		m_indexLookupType == INDEX_LOOKUP_TYPE_GT ||
+				m_indexLookupType == INDEX_LOOKUP_TYPE_GTE
+	    		) {
+	    	m_index.moveToLessThanKeyByTuple(&m_lastIndexTuple, m_indexCursor);
+	    }
+	    else if (m_indexLookupType == INDEX_LOOKUP_TYPE_LT ||
+			    m_indexLookupType == INDEX_LOOKUP_TYPE_LTE) {
+	    	m_index.moveToGreaterThanKeyByTuple(&m_lastIndexTuple, m_indexCursor);
+	    }
+
+	    /*
+		std::cout << "Moving m_lastIndexTuple from " << m_lastIndexTuple.debugNoHeader() << std::endl;
+		std::cout << "to ";
+		*/
+
+		m_lastIndexTuple = m_index.currentValue(m_indexCursor);
+
+		/*
+		if (!m_lastIndexTuple.isNullTuple()) {
+			std::cout << m_lastIndexTuple.debugNoHeader() << std::endl;
+		}
+		else {
+			std::cout << " NULL " << std::endl;
+		}
+		*/
+
+	}
+    //* debug */ std::cout << "INDEX " << m_index.debug() << std::endl;
+    //* debug */ std::cout << "INSERTS " << m_indexInserts->debug() << std::endl;
+    //* debug */ std::cout << "DELETES " << m_indexDeletes->debug() << std::endl;
+    /*
+	std::cout << "m_lastIndexTuple ";
+	if (!m_lastIndexTuple.isNullTuple()) {
+		std::cout << m_lastIndexTuple.debugNoHeader();
+	}
+	std::cout << std::endl;
+	std::cout << "m_lastDeletesTuple ";
+	if (!m_lastDeletesTuple.isNullTuple()) {
+		std::cout << m_lastDeletesTuple.debugNoHeader();
+	}
+	std::cout << std::endl;
+	*/
 
     return true;
 }
@@ -314,24 +439,98 @@ void IndexCopyOnWriteContext::notifyBlockWasCompactedAway(TBPtr block) {
 }
 
 bool IndexCopyOnWriteContext::notifyTupleInsert(TableTuple &tuple) {
-	std::cout << "notifyTupleInsert " << tuple.debugNoHeader() << std::endl;
+	//* debug */ std::cout << "notifyTupleInsert " << tuple.debugNoHeader() << std::endl;
 	PersistentTable &table = m_table;
 	TableTuple conflict(table.schema());
 	// Add to insert tree
-	m_indexInserts->addEntry(&tuple, &conflict);
+	m_indexInserts->addEntry(&tuple, &tuple);
+	//* debug */ std::cout << "INDEX " << m_index.debug() << std::endl;
+	//* debug */ std::cout << "INSERTS " << m_indexInserts->debug() << std::endl;
+	//* debug */ std::cout << "DELETES " << m_indexDeletes->debug() << std::endl;
+	/*
+	std::cout << "m_lastIndexTuple ";
+	if (!m_lastIndexTuple.isNullTuple()) {
+		std::cout << m_lastIndexTuple.debugNoHeader();
+	}
+	std::cout << std::endl;
+	std::cout << "m_lastDeletesTuple ";
+	if (!m_lastDeletesTuple.isNullTuple()) {
+		std::cout << m_lastDeletesTuple.debugNoHeader();
+	}
+	std::cout << std::endl;
+	*/
     return true;
 }
 
+// XXX can this update also change the address of the tuple? Or is it guaranteed to always be in place?
 bool IndexCopyOnWriteContext::notifyTupleUpdate(TableTuple &tuple) {
 	PersistentTable &table = m_table;
 	TableTuple conflict(table.schema());
-	std::cout << "notifyTupleUpdate " << tuple.debugNoHeader() << std::endl;
-	// Copy data
-	m_backedUpTuples->insertTempTupleDeepCopy(tuple, &m_pool);
-	// Add to delete tree
-	m_indexDeletes->addEntry(&tuple, &conflict);
-	// Add new to insert tree
-	m_indexInserts->addEntry(&tuple, &conflict);
+	//* debug */ std::cout << "notifyTupleUpdate " << tuple.debugNoHeader() << std::endl;
+	if (!m_indexInserts->exists(&tuple)) {
+		// Copy data
+		TableTuple copy(table.schema());
+		copy = m_backedUpTuples->insertTempTupleDeepCopy(tuple, &m_pool);
+		// Add to delete tree
+		// XXX TODO make different addEntry path if this works so we don't risk overwriting the original table tuple...
+		m_indexDeletes->addEntry(&copy, &tuple);
+		// Add new to insert tree
+		m_indexInserts->addEntry(&tuple, &tuple);
+
+		// We may need to adjust the delete cursor
+		if (!m_lastIndexTuple.isNullTuple()) {
+			// is the tuple updated before the lastIndexTuple?
+			//m_index.moveToKeyByTuple(&m_lastIndexTuple, m_indexCursor);
+			//m_index.moveToKeyByTuple(&m_lastIndexTuple, m_indexCursor);
+			int tupleLTELastIndexCompare = m_index.compare(&tuple, &m_lastIndexTuple);
+
+			bool deleteTupleLessThanindexTuple = false;
+			if (!m_lastDeletesTuple.isNullTuple()) {
+				m_indexDeletes->moveToKeyByTupleAddr(&m_lastDeletesTuple, m_keyAddr, m_deletesCursor);
+				deleteTupleLessThanindexTuple = m_indexDeletes->compare(&tuple, m_deletesCursor) > 0;
+			}
+			bool typeGT = (m_indexLookupType == INDEX_LOOKUP_TYPE_EQ ||
+		    		m_indexLookupType == INDEX_LOOKUP_TYPE_GT ||
+					m_indexLookupType == INDEX_LOOKUP_TYPE_GTE);
+			bool typeLT = (m_indexLookupType == INDEX_LOOKUP_TYPE_LT ||
+				    m_indexLookupType == INDEX_LOOKUP_TYPE_LTE);
+			if (
+					(typeGT
+					&& (m_lastDeletesTuple.isNullTuple() || deleteTupleLessThanindexTuple)
+					&& tupleLTELastIndexCompare <= 0) ||
+					(typeLT
+					&& (m_lastDeletesTuple.isNullTuple() || !deleteTupleLessThanindexTuple)
+					&& tupleLTELastIndexCompare >= 0)) {
+				/*
+				if (!m_lastDeletesTuple.isNullTuple()) {
+				std::cout << "Moving lastDeletesTuple from " << m_lastDeletesTuple.debugNoHeader() << std::endl;
+				}
+				else {
+					std::cout << "Moving lastDeletesTuple from NULL " << std::endl;
+				}
+				std::cout << "to " << tuple.debugNoHeader() << std::endl;
+				*/
+				m_lastDeletesTuple = copy;
+				m_keyAddr = tuple.address();
+			}
+		}
+
+	}
+	//* debug */ std::cout << "INDEX " << m_index.debug() << std::endl;
+	//* debug */ std::cout << "INSERTS " << m_indexInserts->debug() << std::endl;
+	//* debug */ std::cout << "DELETES " << m_indexDeletes->debug() << std::endl;
+	/*
+	std::cout << "m_lastIndexTuple ";
+	if (!m_lastIndexTuple.isNullTuple()) {
+		std::cout << m_lastIndexTuple.debugNoHeader();
+	}
+	std::cout << std::endl;
+	std::cout << "m_lastDeletesTuple ";
+	if (!m_lastDeletesTuple.isNullTuple()) {
+		std::cout << m_lastDeletesTuple.debugNoHeader();
+	}
+	std::cout << std::endl;
+	*/
     return true;
 }
 

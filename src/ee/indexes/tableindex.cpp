@@ -72,13 +72,15 @@ TableIndexScheme::TableIndexScheme(
       countable(a_countable),
       expressionsAsText(a_expressionsAsText),
       predicateAsText(a_predicateAsText),
-      tupleSchema(a_tupleSchema)
+      tupleSchema(a_tupleSchema),
+	  negativeDelta(false)
     {
         if (predicate != NULL)
         {
             // Collect predicate column indicies
             ExpressionUtil::extractTupleValuesColumnIdx(a_predicate, allColumnIndices);
         }
+
     }
 
 TableIndex::TableIndex(const TupleSchema *keySchema, const TableIndexScheme &scheme) :

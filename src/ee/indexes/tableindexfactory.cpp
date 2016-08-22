@@ -72,7 +72,7 @@ class TableIndexPicker
             } else if (m_scheme.countable) {
                 return new CompactingTreeUniqueIndex<NormalKeyValuePair<TKeyType>, true>(m_keySchema, m_scheme);
             } else {
-                return new CompactingTreeUniqueIndex<NormalKeyValuePair<TKeyType>, false>(m_keySchema, m_scheme);
+            	return new CompactingTreeUniqueIndex<NormalKeyValuePair<TKeyType>, false>(m_keySchema, m_scheme);
             }
         } else {
             if (m_type != BALANCED_TREE_INDEX) {
@@ -187,7 +187,7 @@ public:
             if (m_scheme.countable) {
                 return new CompactingTreeUniqueIndex<NormalKeyValuePair<TupleKey>, true >(m_keySchema, m_scheme);
             } else {
-                return new CompactingTreeUniqueIndex<NormalKeyValuePair<TupleKey>, false>(m_keySchema, m_scheme);
+            	return new CompactingTreeUniqueIndex<NormalKeyValuePair<TupleKey>, false>(m_keySchema, m_scheme);
             }
         }
         if (m_scheme.countable) {
@@ -297,7 +297,6 @@ TableIndex *TableIndexFactory::getInstance(const TableIndexScheme &scheme) {
             keyColumnAllowNull, keyColumnInBytes);
     assert(keySchema);
     VOLT_TRACE("Creating index for '%s' with key schema '%s'", scheme.name.c_str(), keySchema->debug().c_str());
-    std::cout << "Creating index for '" << scheme.name.c_str() <<"' with key schema '" << keySchema->debug().c_str() << "'" << std::endl;
     TableIndexPicker picker(keySchema, isIntsOnly, isInlinesOrColumnsOnly, scheme);
     TableIndex *retval = picker.getInstance();
     return retval;

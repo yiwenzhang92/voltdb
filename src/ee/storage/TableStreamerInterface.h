@@ -28,6 +28,7 @@ namespace voltdb
     class TupleSerializer;
     class TupleOutputStreamProcessor;
     class PersistentTableSurgeon;
+    struct IndexCursor;
 
     /**
      * Defines the interface for table streaming.
@@ -77,7 +78,7 @@ namespace voltdb
 
         virtual bool cleanupTuple(TableTuple &tuple, bool deleteTuple) = 0;
 
-        virtual bool adjustCursors(int type) = 0;
+        virtual bool adjustCursors(int type, IndexCursor *cursor) = 0;
 
         /**
          * Tuple insert hook.

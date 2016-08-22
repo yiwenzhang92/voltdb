@@ -162,6 +162,12 @@ public class TestLongRunningReadQuery extends RegressionSuite {
          resetStats();
 
          subtest2ConcurrentReadError(client);
+         
+         //loadTableAdHoc(client, "R1");
+         
+         resetStats();
+         
+         subtest3Index(client);
 
     }
 
@@ -221,6 +227,24 @@ public class TestLongRunningReadQuery extends RegressionSuite {
         VoltTable vt = client.callProcedure("@AdHoc",sql).getResults()[0];
         assertEquals(initTableSize + m_insertCount - m_deleteCount,vt.getRowCount());
     }
+    
+    public void subtest3Index(Client client) throws IOException, ProcCallException {
+        System.out.println("subtest3Index...");
+        String sql;
+        m_receivedResponse = false;
+
+        sql = "SELECT * FROM R1 WHERE ID > " + initTableSize + ";";
+        executeLRR(client,sql);
+        while (!m_receivedResponse) {
+            // Do random ad hoc queries until the long running read returns
+            doRandomTableManipulation(client, "R1");
+
+        }
+        //System.out.println(initTableSize + " " + m_insertCount + " " + m_deleteCount);
+        VoltTable vt = client.callProcedure("@AdHoc",sql).getResults()[0];
+        assertEquals(initTableSize + m_insertCount - m_deleteCount,vt.getRowCount());
+        assertTrue(m_insertCount > 0 || m_deleteCount > 0 || m_updateCount > 0);
+    }
 
 
     //
@@ -263,6 +287,8 @@ public class TestLongRunningReadQuery extends RegressionSuite {
                 + ", COL9 INT "
                 + ");"
                 + ""
+                + "CREATE INDEX R1_TREE_1 ON R1 (ID);"
+                + "CREATE INDEX R1_TREE_2 ON R1 (COL1);"
                 ;
         try {
             project.addLiteralSchema(literalSchema);

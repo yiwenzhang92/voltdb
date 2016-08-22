@@ -76,7 +76,7 @@ bool TableStreamer::activateStream(PersistentTableSurgeon &surgeon,
                                    const std::vector<std::string> &predicateStrings,
 								   std::string indexName)
 {
-	std::cout << "TableStreamer::activateStream" << std::endl;
+	//* debug */ std::cout << "TableStreamer::activateStream" << std::endl;
     bool failed = false;
     bool found = false;
     BOOST_FOREACH(StreamPtr &streamPtr, m_streams) {
