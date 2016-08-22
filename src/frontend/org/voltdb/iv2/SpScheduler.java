@@ -980,7 +980,7 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
             int result = counter.offer(message);
             if (result == DuplicateCounter.DONE) {
                 if (txn != null && txn.isDone()) {
-                    setRepairLogTruncationHandle(message.getSpHandle());
+                    setRepairLogTruncationHandle(txn.m_spHandle);
                 }
 
                 m_duplicateCounters.remove(new DuplicateCounterKey(message.getTxnId(), message.getSpHandle()));
@@ -1005,7 +1005,7 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
                     return;
                 }
             } else if (txn.isDone()) {
-                setRepairLogTruncationHandle(message.getSpHandle());
+            	setRepairLogTruncationHandle(txn.m_spHandle);
             }
         }
 
@@ -1071,13 +1071,15 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
 
         if (txnDone) {
             m_outstandingTxns.remove(msg.getTxnId());
-
-            // Set the truncation handle here instead of when processing
-            // FragmentResponseMessage to avoid letting replicas think a
-            // fragment is done before the MP txn is fully committed.
-            assert txn == null || txn.isDone();
             m_duplicateCounters.remove(duplicateCounterKey);
-            setRepairLogTruncationHandle(msg.getSpHandle());
+
+            if (txn != null) {
+                // Set the truncation handle here instead of when processing
+                // FragmentResponseMessage to avoid letting replicas think a
+                // fragment is done before the MP txn is fully committed.
+                assert txn.isDone();
+                setRepairLogTruncationHandle(txn.m_spHandle);
+            }
         }
 
         // The CompleteTransactionResponseMessage ends at the SPI. It is not
@@ -1312,7 +1314,11 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
                 synchronized (m_lock) {
                     if (m_lastSentTruncationHandle < m_repairLogTruncationHandle) {
                         m_lastSentTruncationHandle = m_repairLogTruncationHandle;
-                        m_mailbox.send(m_sendToHSIds, new RepairLogTruncationMessage(m_repairLogTruncationHandle));
+                        final RepairLogTruncationMessage truncMsg = new RepairLogTruncationMessage(m_repairLogTruncationHandle);
+                        // Also keep the local repair log's truncation point up-to-date
+                        // so that it can trigger the callbacks.
+                        m_mailbox.deliver(truncMsg);
+                        m_mailbox.send(m_sendToHSIds, truncMsg);
                     }
                 }
             }
