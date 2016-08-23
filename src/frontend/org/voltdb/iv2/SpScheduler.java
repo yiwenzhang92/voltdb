@@ -1005,7 +1005,7 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
                     return;
                 }
             } else if (txn.isDone()) {
-            	setRepairLogTruncationHandle(txn.m_spHandle);
+                setRepairLogTruncationHandle(txn.m_spHandle);
             }
         }
 
