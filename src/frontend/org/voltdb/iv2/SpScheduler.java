@@ -1275,15 +1275,13 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
     private void setRepairLogTruncationHandle(long newHandle)
     {
         assert newHandle >= m_repairLogTruncationHandle : "new handle: " + newHandle + ", repairLog:" + m_repairLogTruncationHandle;
-        if (newHandle <= m_repairLogTruncationHandle) {
-            return;
+        if (newHandle > m_repairLogTruncationHandle) {
+            m_repairLogTruncationHandle = newHandle;
+            if (m_defaultConsistencyReadLevel == ReadLevel.SAFE) {
+                m_bufferedReadLog.releaseBufferedReads(m_mailbox, m_repairLogTruncationHandle);
+            }
+            scheduleRepairLogTruncateMsg();
         }
-
-        m_repairLogTruncationHandle = newHandle;
-        if (m_defaultConsistencyReadLevel == ReadLevel.SAFE) {
-            m_bufferedReadLog.releaseBufferedReads(m_mailbox, m_repairLogTruncationHandle);
-        }
-        scheduleRepairLogTruncateMsg();
     }
 
     /**
