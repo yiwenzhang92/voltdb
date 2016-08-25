@@ -246,7 +246,6 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
             DuplicateCounter counter = m_duplicateCounters.remove(key);
             m_outstandingTxns.remove(key.m_txnId);
             VoltMessage resp = counter.getLastResponse();
-
             setRepairLogTruncationHandle(key.m_spHandle);
             if (resp != null) {
                 // MPI is tracking deps per partition HSID.  We need to make
@@ -739,7 +738,6 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
             if (spHandle > m_repairLogTruncationHandle) {
                 setRepairLogTruncationHandle(spHandle);
             }
-
             m_mailbox.send(message.getInitiatorHSId(), message);
         }
     }
@@ -1277,11 +1275,14 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
     private void setRepairLogTruncationHandle(long newHandle)
     {
         assert newHandle >= m_repairLogTruncationHandle : "new handle: " + newHandle + ", repairLog:" + m_repairLogTruncationHandle;
+        if (newHandle <= m_repairLogTruncationHandle) {
+        	return;
+        }
+
         m_repairLogTruncationHandle = newHandle;
         if (m_defaultConsistencyReadLevel == ReadLevel.SAFE) {
             m_bufferedReadLog.releaseBufferedReads(m_mailbox, m_repairLogTruncationHandle);
         }
-
         scheduleRepairLogTruncateMsg();
     }
 
