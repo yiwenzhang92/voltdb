@@ -1003,7 +1003,7 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
                     return;
                 }
             } else if (txn.isDone()) {
-            	setRepairLogTruncationHandle(txn.m_spHandle);
+                setRepairLogTruncationHandle(txn.m_spHandle);
             }
         }
 
@@ -1276,7 +1276,7 @@ public class SpScheduler extends Scheduler implements SnapshotCompletionInterest
     {
         assert newHandle >= m_repairLogTruncationHandle : "new handle: " + newHandle + ", repairLog:" + m_repairLogTruncationHandle;
         if (newHandle <= m_repairLogTruncationHandle) {
-        	return;
+            return;
         }
 
         m_repairLogTruncationHandle = newHandle;
