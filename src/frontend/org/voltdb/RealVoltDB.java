@@ -306,6 +306,8 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
     private volatile boolean m_isRunning = false;
     private boolean m_isRunningWithOldVerb = true;
 
+    private AtomicBoolean m_shuttingDownInProgress = new AtomicBoolean(false);
+
     @Override
     public boolean isRunningWithOldVerbs() {
         return m_isRunningWithOldVerb;
@@ -2760,7 +2762,7 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
     public boolean shutdown(Thread mainSiteThread) throws InterruptedException {
         synchronized(m_startAndStopLock) {
             boolean did_it = false;
-            if (m_mode != OperationMode.SHUTTINGDOWN) {
+            if (m_shuttingDownInProgress.compareAndSet(false,true)) {
                 did_it = true;
                 m_mode = OperationMode.SHUTTINGDOWN;
 
@@ -2869,7 +2871,6 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
                     m_asyncCompilerAgent = null;
                 }
 
-                ExportManager.instance().shutdown();
                 m_computationService.shutdown();
                 m_computationService.awaitTermination(1, TimeUnit.DAYS);
                 m_computationService = null;

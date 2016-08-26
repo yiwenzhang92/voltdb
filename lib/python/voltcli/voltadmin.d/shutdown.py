@@ -16,7 +16,10 @@
 
 @VOLT.Command(
     bundles = VOLT.AdminBundle(),
-    description = 'Shut down the running VoltDB cluster.'
+    description = 'Shut down the running VoltDB cluster.',
+    options = (
+        VOLT.BooleanOption('-F', '--force', 'forcing', 'flush transactions', default = False),
+    )
 )
 def shutdown(runner):
     response = runner.call_proc('@Shutdown', [], [], check_status = False)
